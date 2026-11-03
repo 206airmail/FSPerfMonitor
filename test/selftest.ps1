@@ -41,6 +41,16 @@ $j = Snap $idle.Id
 Check ($j.mainThreadBusyPct -lt 20 -and $j.verdict.label -eq 'neither') "idle process: low busy, verdict 'neither' ($([math]::Round($j.mainThreadBusyPct))%, $($j.verdict.label))"
 $idle.WaitForExit()
 
+# full-mode verdict rules on synthetic frames (frame ms, CPU busy ms, GPU busy ms)
+foreach ($c in @(@('16.7', '16.0', '9.0', 'CPU-bound'), @('16.7', '8.0', '16.2', 'GPU-bound'), @('16.7', '6.0', '7.0', 'neither'),
+                 @('16.7', '15.8', '16.1', 'both near the limit'))) {
+    $v = & $exe --judge $c[0] $c[1] $c[2]
+    Check ($v -eq $c[3]) "full-mode verdict: frame $($c[0]) ms, CPU $($c[1]), GPU $($c[2]) -> $v"
+}
+# without admin / Performance Log Users, full mode reports why and basic mode goes on
+$j = & $exe --once --pid $PID | ConvertFrom-Json
+if (-not $j.elevated) { Check ($j.mode -eq 'basic' -and ($j.frames.state -in @('denied', 'off'))) "not elevated: full mode '$($j.frames.state)', basic mode used" }
+
 if ($fails) { Write-Host "FSPERF SELFTEST: $fails failure(s)"; exit 1 }
 Write-Host "FSPERF SELFTEST OK"
 exit 0

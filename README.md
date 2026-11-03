@@ -12,12 +12,38 @@ without FSPluginHost too.
 ## Use
 
 ```
-build.ps1                      (needs the .NET 8 SDK; -Publish = one self-contained fsperf.exe in publish\)
+build.ps1 -FetchPresentMon     (needs the .NET 8 SDK; downloads PresentMon 2.6.0 for full mode, hash-checked;
+                                -Publish = one self-contained fsperf.exe + PresentMon in publish\)
 fsperf                          dashboard on http://127.0.0.1:8765/, opens the browser, waits for the game
 fsperf --record run.csv         the same, plus one CSV line per tick
 fsperf --once                   one JSON snapshot to stdout (for scripts and test runners)
    options: --port <n> --interval-ms <ms> --sample-hz <hz> --pid <n> --profile <dir> --seconds <n> --no-browser
+            --presentmon <exe> --no-frames
 ```
+
+## Full mode (0.2): per-frame CPU and GPU time
+
+When FSPerf may read Windows' presentation events, it starts Intel's PresentMon console (MIT, signed by Intel; found
+next to `fsperf.exe`, in `tools\`, or at `--presentmon`). PresentMon reports every frame of the game:
+
+- **Frame time:** FPS, the p99 frame time, and the 1% low (the frame rate of the slowest 1% of frames).
+- **CPU busy / wait:** the main thread's work per frame and its waits.
+- **GPU busy / wait:** the GPU's work on the frame and its idle time.
+- **Display latency.**
+
+The dashboard shows "full mode", and the verdict then comes from the frames:
+- **Neither** (frame cap, vsync or waiting): the larger of CPU busy and GPU busy is under 80% of the frame time.
+- **Both near the limit:** both are at least 80% of the frame time and within 10% of each other.
+- Otherwise the bigger side is the limit: **CPU-bound** or **GPU-bound**.
+
+**Permission:** full mode needs EITHER of these:
+- **Run FSPerf as administrator:** open an admin terminal and run `fsperf --no-browser`. Open the printed URL in your
+  normal browser, because a browser FSPerf starts would run as admin too.
+- **The "Performance Log Users" group,** set up once in an admin terminal:
+  `net localgroup "Performance Log Users" <your account> /add`. Sign out and back in. After that, no admin is needed.
+
+Without either, the dashboard says so and FSPerf keeps running in basic mode. When FSPerf exits, the capture session is
+stopped; `--stop_existing_session` cleans up after a crash.
 
 ## What it measures (0.1, basic mode: no admin rights, nothing injected)
 
@@ -41,7 +67,7 @@ These are load-based rules: without per-frame data they tell you which side is s
 waits.
 
 **Limits of basic mode:**
-- No FPS or frame times: those need the frame events in full mode, below.
+- No FPS or frame times: those need full mode, above.
 - A plugin's share is the time spent in its own code. Game code its hooks call counts as the game, because this is a
   leaf-only measure; inclusive time needs stack walks, which come later.
 - Lua mods all run inside the game's script engine, so they show as the game.
@@ -51,9 +77,6 @@ Don't sample during timing-sensitive A/B test runs unless both arms are sampled.
 
 ## Planned
 
-- **Full mode:** per-frame CPU busy / GPU busy / frame time from Windows' presentation events (PresentMon, MIT). This is
-  the exact CPU/GPU-bound answer plus FPS and percentiles. It needs admin rights or the "Performance Log Users" group,
-  set up once.
 - **Inclusive per-plugin time:** sampled stacks, so time a plugin's hook causes inside game code counts too.
 - **Lua mod timing:** an optional helper mod.
 - **Test runners:** recording a trace per run, compared across runs.
@@ -64,5 +87,7 @@ Don't sample during timing-sensitive A/B test runs unless both arms are sampled.
 - a busy .NET main thread is seen busy and CPU-bound
 - a native busy thread is attributed to its real module
 - an idle process gets "neither"
+- the full-mode verdict rules on synthetic frames
+- without permission, full mode reports why and basic mode is used
 
 MIT licence, Copyright (c) 2026 Jared Brown.

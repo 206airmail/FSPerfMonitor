@@ -12,7 +12,8 @@ public sealed record Verdict(string Label, string Reason);
 public sealed record Snapshot(
     DateTime Time, string Mode, bool Attached, int Pid, string Process, double ProcessCpuPct, int Cores, double MainThreadBusyPct,
     List<ThreadLoad> TopThreads, double Gpu3DPct, double GpuDedicatedMb, double WorkingSetMb, double PrivateMb,
-    List<MainThreadSampler.Share> MainThreadModules, long MainThreadSamples, FspStatusInfo Fsp, Verdict Verdict, string Note);
+    List<MainThreadSampler.Share> MainThreadModules, long MainThreadSamples, FspStatusInfo Fsp, Verdict Verdict, string Note,
+    FrameStats? Frames, bool Elevated);
 
 public sealed class Collector : IDisposable
 {
@@ -21,6 +22,8 @@ public sealed class Collector : IDisposable
     private readonly ModuleMap _modules = new();
     private readonly MainThreadSampler _sampler;
     private readonly GpuCounters _gpu = new();
+    private readonly FrameMonitor? _frames;
+    private readonly bool _elevated = FrameMonitor.IsElevated();
     private Process? _proc;
     private IntPtr _procHandle;
     private int _mainTid;
@@ -33,6 +36,7 @@ public sealed class Collector : IDisposable
     {
         _o = o;
         _sampler = new MainThreadSampler(_modules, o.SampleHz);
+        if (!o.NoFrames) _frames = new FrameMonitor(o.PresentMon);
     }
 
     private Process? FindGame()
@@ -92,7 +96,7 @@ public sealed class Collector : IDisposable
         if (_proc == null || _proc.HasExited) {
             if (!Attach()) {
                 return new Snapshot(DateTime.Now, "basic", false, 0, "", 0, Environment.ProcessorCount, 0, new(), double.NaN, double.NaN, 0, 0,
-                    new(), 0, fsp, new Verdict("waiting", "the game is not running"), "");
+                    new(), 0, fsp, new Verdict("waiting", "the game is not running"), "", null, _elevated);
             }
             now = DateTime.UtcNow;
         }
@@ -128,10 +132,13 @@ public sealed class Collector : IDisposable
         var (gpu3d, vram) = _gpu.Sample(p.Id);
         double ws = 0, priv = 0;
         try { p.Refresh(); ws = p.WorkingSet64 / 1048576.0; priv = p.PrivateMemorySize64 / 1048576.0; } catch { }
-        var verdict = Judge(mainBusy, gpu3d);
+        _frames?.Ensure(p.Id);
+        var frames = _frames?.TakeWindow(wall);
+        bool full = frames != null && frames.State == "running" && frames.Frames > 0;
+        var verdict = (full ? FrameMonitor.Judge(frames!) : null) ?? Judge(mainBusy, gpu3d);
         string note = _sampler.Running ? "" : "main-thread sampler not running (thread access denied?)";
-        return new Snapshot(DateTime.Now, "basic", true, p.Id, p.ProcessName, procPct, Environment.ProcessorCount, mainBusy, top, gpu3d, vram, ws,
-            priv, shares, samples, fsp, verdict, note);
+        return new Snapshot(DateTime.Now, full ? "full" : "basic", true, p.Id, p.ProcessName, procPct, Environment.ProcessorCount, mainBusy, top, gpu3d,
+            vram, ws, priv, shares, samples, fsp, verdict, note, frames, _elevated);
     }
 
     // basic mode (no frame events): the main thread's busy share against the GPU's 3D load.
@@ -153,6 +160,7 @@ public sealed class Collector : IDisposable
     public void Dispose()
     {
         Detach();
+        _frames?.Dispose();
         _gpu.Dispose();
     }
 }

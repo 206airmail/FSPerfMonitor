@@ -1,7 +1,7 @@
 // Program.cs - FSPerf: a performance monitor for Farming Simulator 25, from outside the game. Copyright (c) 2026 Jared Brown.
 // MIT licence. See ..\README.md.
 //   fsperf [--port 8765] [--interval-ms 1000] [--sample-hz 250] [--record <file.csv>] [--pid <n>] [--profile <dir>]
-//          [--once] [--no-browser]
+//          [--once] [--no-browser] [--presentmon <exe>] [--no-frames]
 //   fsperf --burn <seconds>     (self-test helper: one busy main thread)
 using System.Diagnostics;
 using System.Globalization;
@@ -21,6 +21,8 @@ public sealed class Options
     public bool Once;
     public bool NoBrowser;
     public int Seconds;   // stop after this many seconds (0 = until Ctrl+C)
+    public string? PresentMon;  // full mode: PresentMon console exe (default: next to fsperf.exe or in tools\)
+    public bool NoFrames;       // basic mode only
 
     public static Options Parse(string[] a)
     {
@@ -37,6 +39,8 @@ public sealed class Options
                 case "--once": o.Once = true; break;
                 case "--no-browser": o.NoBrowser = true; break;
                 case "--seconds": o.Seconds = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                case "--presentmon": o.PresentMon = Next(); break;
+                case "--no-frames": o.NoFrames = true; break;
                 default: throw new ArgumentException($"unknown option {a[i]}");
             }
         }
@@ -46,13 +50,19 @@ public sealed class Options
 
 public static class Program
 {
-    public const string Version = "0.1.0";
+    public const string Version = "0.2.0";
     public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, NumberHandling =
         System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
 
     public static int Main(string[] args)
     {
         if (args.Length == 2 && args[0] == "--burn") return Burn(int.Parse(args[1], CultureInfo.InvariantCulture));
+        if (args.Length == 4 && args[0] == "--judge") {  // self-test helper: the full-mode verdict for frame / CPU busy / GPU busy ms
+            double P(string x) => double.Parse(x, CultureInfo.InvariantCulture);
+            var f = new FrameStats("running", "", 100, 1000 / P(args[1]), P(args[1]), P(args[1]), P(args[1]), 0, P(args[2]), 0, P(args[3]), 0, 0, 0, "", "");
+            Console.WriteLine(FrameMonitor.Judge(f)?.Label ?? "none");
+            return 0;
+        }
         Options o;
         try { o = Options.Parse(args); } catch (Exception e) { Console.Error.WriteLine($"fsperf: {e.Message}"); return 2; }
         using var col = new Collector(o);
@@ -99,7 +109,8 @@ public sealed class CsvRecorder : IDisposable
     public CsvRecorder(string path)
     {
         _w = new StreamWriter(path, append: false, Encoding.UTF8) { AutoFlush = true };
-        _w.WriteLine("time,attached,pid,verdict,main_thread_busy_pct,process_cpu_pct,gpu_3d_pct,gpu_dedicated_mb,working_set_mb,private_mb," +
+        _w.WriteLine("time,attached,pid,mode,verdict,main_thread_busy_pct,process_cpu_pct,gpu_3d_pct,gpu_dedicated_mb,working_set_mb,private_mb," +
+                     "frames,fps,frame_ms_avg,frame_ms_p99,low1_fps,cpu_busy_ms,cpu_wait_ms,gpu_busy_ms,gpu_wait_ms,display_latency_ms," +
                      "main_thread_samples,top_modules,fsp_version,fsp_plugins");
     }
 
@@ -110,8 +121,12 @@ public sealed class CsvRecorder : IDisposable
     {
         string mods = string.Join("; ", s.MainThreadModules.Take(6).Select(m => $"{m.Name}={m.Percent.ToString("0.#", CultureInfo.InvariantCulture)}%"));
         string plugins = string.Join("; ", s.Fsp.Plugins.Select(p => $"{p.Name}:{p.State}"));
+        var f = s.Frames != null && s.Frames.Frames > 0 ? s.Frames : null;
         _w.WriteLine(string.Join(",", s.Time.ToString("o", CultureInfo.InvariantCulture), s.Attached ? "1" : "0", s.Pid.ToString(CultureInfo.InvariantCulture),
-            Q(s.Verdict.Label), N(s.MainThreadBusyPct), N(s.ProcessCpuPct), N(s.Gpu3DPct), N(s.GpuDedicatedMb), N(s.WorkingSetMb), N(s.PrivateMb),
+            Q(s.Mode), Q(s.Verdict.Label), N(s.MainThreadBusyPct), N(s.ProcessCpuPct), N(s.Gpu3DPct), N(s.GpuDedicatedMb), N(s.WorkingSetMb), N(s.PrivateMb),
+            (f?.Frames ?? 0).ToString(CultureInfo.InvariantCulture), N(f?.Fps ?? double.NaN), N(f?.FrameTimeAvgMs ?? double.NaN), N(f?.FrameTimeP99Ms ?? double.NaN),
+            N(f?.Low1PctFps ?? double.NaN), N(f?.CpuBusyMs ?? double.NaN), N(f?.CpuWaitMs ?? double.NaN), N(f?.GpuBusyMs ?? double.NaN), N(f?.GpuWaitMs ?? double.NaN),
+            N(f?.DisplayLatencyMs ?? double.NaN),
             s.MainThreadSamples.ToString(CultureInfo.InvariantCulture), Q(mods), Q(s.Fsp.Version), Q(plugins)));
     }
 

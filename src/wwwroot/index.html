@@ -42,6 +42,8 @@ td.num { text-align: right; white-space: nowrap; }
 .note { color: var(--muted); font-size: 12px; margin-top: 8px; }
 .state-active { color: var(--ok); } .state-other { color: var(--warn); }
 code { font-size: 12px; }
+.badge { margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; text-transform: none; letter-spacing: 0; background: var(--line); color: var(--ink); }
+.badge.full { background: var(--ok); color: #fff; }
 </style>
 </head>
 <body>
@@ -53,6 +55,20 @@ code { font-size: 12px; }
 </header>
 <main>
   <section class="panel wide">
+    <h2>Frames <span id="modeBadge" class="badge">basic mode</span></h2>
+    <div class="tiles">
+      <div class="tile"><div class="k">FPS</div><div class="v" id="fFps">-</div><div class="s" id="fLow">1% low -</div></div>
+      <div class="tile"><div class="k">Frame time</div><div class="v" id="fFt">-</div><div class="s" id="fP99">p99 -</div></div>
+      <div class="tile"><div class="k">CPU busy / frame</div><div class="v" id="fCpu">-</div><div class="s" id="fCpuW">waits -</div></div>
+      <div class="tile"><div class="k">GPU busy / frame</div><div class="v" id="fGpu">-</div><div class="s" id="fGpuW">waits -</div></div>
+      <div class="tile"><div class="k">Latency</div><div class="v" id="fLat">-</div><div class="s" id="fMode">display</div></div>
+    </div>
+    <canvas id="frameChart"></canvas>
+    <div class="legend"><span><i style="background:var(--ink)"></i>frame time ms</span><span><i style="background:var(--cpu)"></i>CPU busy ms</span><span><i style="background:var(--gpu)"></i>GPU busy ms</span></div>
+    <div class="note" id="frameNote">Full mode reads per-frame timing from Windows (PresentMon).</div>
+  </section>
+  <section class="panel wide">
+    <h2>Load</h2>
     <div class="tiles">
       <div class="tile"><div class="k">Main thread busy</div><div class="v" id="tMain">-</div><div class="s">of one core</div></div>
       <div class="tile"><div class="k">GPU 3D</div><div class="v" id="tGpu">-</div><div class="s">busiest 3D engine</div></div>
@@ -82,6 +98,7 @@ code { font-size: 12px; }
 </main>
 <script>
 const hist = [];             // {t, main, gpu}
+const fhist = [];            // {ft, cpu, gpu} per tick (ms)
 const HISTORY = 300;
 const $ = id => document.getElementById(id);
 const fmt = (v, d = 0) => (typeof v === "number" && isFinite(v)) ? v.toFixed(d) : "-";
@@ -118,6 +135,63 @@ function draw() {
   line("gpu", "--gpu");
 }
 
+function drawFrames() {
+  const c = $("frameChart"), dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext("2d");
+  g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  const padL = 40, padB = 18, pw = w - padL - 6, ph = h - padB - 6;
+  let top = 20;
+  for (const p of fhist) for (const k of ["ft", "cpu", "gpu"]) if (isFinite(p[k])) top = Math.max(top, p[k]);
+  top = Math.ceil(top / 10) * 10;
+  g.strokeStyle = css("--line"); g.fillStyle = css("--muted"); g.font = "11px system-ui"; g.lineWidth = 1;
+  for (const y of [0, top / 2, top]) {
+    const yy = 6 + ph * (1 - y / top);
+    g.beginPath(); g.moveTo(padL, yy); g.lineTo(padL + pw, yy); g.stroke();
+    g.fillText(y.toFixed(0) + " ms", 2, yy + 4);
+  }
+  const line = (key, color) => {
+    g.strokeStyle = css(color); g.lineWidth = 2; g.beginPath();
+    let started = false;
+    fhist.forEach((p, i) => {
+      const v = p[key];
+      if (!isFinite(v)) { started = false; return; }
+      const x = padL + pw * (i + HISTORY - fhist.length) / (HISTORY - 1), y = 6 + ph * (1 - v / top);
+      if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y);
+    });
+    g.stroke();
+  };
+  line("ft", "--ink"); line("cpu", "--cpu"); line("gpu", "--gpu");
+}
+
+function renderFrames(s) {
+  const f = s.frames, full = s.mode === "full";
+  const b = $("modeBadge");
+  b.textContent = full ? "full mode" : "basic mode"; b.className = "badge" + (full ? " full" : "");
+  const n = x => (typeof x === "number") ? x : NaN;
+  if (!f) { $("frameNote").textContent = "Full mode off (--no-frames)."; return; }
+  $("fFps").textContent = f.frames ? fmt(n(f.fps)) : "-";
+  $("fLow").textContent = "1% low " + (f.frames ? fmt(n(f.low1PctFps)) : "-");
+  $("fFt").textContent = f.frames ? fmt(n(f.frameTimeAvgMs), 1) + " ms" : "-";
+  $("fP99").textContent = "p99 " + (f.frames ? fmt(n(f.frameTimeP99Ms), 1) + " ms" : "-");
+  $("fCpu").textContent = f.frames ? fmt(n(f.cpuBusyMs), 1) + " ms" : "-";
+  $("fCpuW").textContent = "waits " + (f.frames ? fmt(n(f.cpuWaitMs), 1) + " ms" : "-");
+  $("fGpu").textContent = f.frames ? fmt(n(f.gpuBusyMs), 1) + " ms" : "-";
+  $("fGpuW").textContent = "waits " + (f.frames ? fmt(n(f.gpuWaitMs), 1) + " ms" : "-");
+  $("fLat").textContent = f.frames ? fmt(n(f.displayLatencyMs), 1) + " ms" : "-";
+  $("fMode").textContent = "display" + (f.presentMode ? " · " + f.presentMode : "") + (f.runtime ? " · " + f.runtime : "");
+  const why = { off: "PresentMon not found.", denied: "Full mode needs admin rights or the Performance Log Users group.", starting: "starting the capture...",
+    running: f.frames ? "Per-frame timing from Windows presentation events (PresentMon)." : "capture running, no frames yet (game paused or minimised?)",
+    exited: "PresentMon stopped.", error: "PresentMon error." };
+  $("frameNote").textContent = (why[f.state] || f.state) + (f.hint ? " " + f.hint : "") + (s.elevated ? " (FSPerf runs as admin)" : "");
+  if (s.attached) {
+    fhist.push({ ft: f.frames ? n(f.frameTimeAvgMs) : NaN, cpu: f.frames ? n(f.cpuBusyMs) : NaN, gpu: f.frames ? n(f.gpuBusyMs) : NaN });
+    while (fhist.length > HISTORY) fhist.shift();
+  }
+  drawFrames();
+}
+
 function render(s) {
   if (!s || s.time === undefined) return;
   $("status").textContent = s.attached ? `attached to ${s.process} (pid ${s.pid}), ${s.mainThreadSamples} samples this tick` : "waiting for the game";
@@ -138,6 +212,7 @@ function render(s) {
     while (hist.length > HISTORY) hist.shift();
   }
   draw();
+  renderFrames(s);
   $("mods").innerHTML = (s.mainThreadModules || []).slice(0, 14).map(m =>
     `<tr class="${esc(m.kind)}"><td>${esc(m.name)}</td><td class="kind">${esc(m.kind)}</td><td><div class="bar" style="width:${Math.max(0.5, m.percent)}%"></div></td><td class="num">${fmt(m.percent, 1)}%</td></tr>`).join("")
     || `<tr><td colspan="4" class="kind">no samples</td></tr>`;
@@ -158,7 +233,7 @@ function connect() {
   es.onmessage = e => { try { render(JSON.parse(e.data)); } catch (_) {} };
   es.onerror = () => { $("status").textContent = "FSPerf not running? reconnecting..."; es.close(); setTimeout(connect, 2000); };
 }
-window.addEventListener("resize", draw);
+window.addEventListener("resize", () => { draw(); drawFrames(); });
 connect();
 </script>
 </body>

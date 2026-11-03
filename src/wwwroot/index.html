@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FSPerf</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5f6b7a; --line: #e2e6eb;
+  --cpu: #2f6fdb; --gpu: #d9822b; --ok: #2e8b57; --warn: #c0392b; --both: #8e44ad; --idle: #7f8c8d;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111418; --panel: #1a1f25; --ink: #e8ecf1; --muted: #9aa6b4; --line: #2a313a;
+          --cpu: #5b93f0; --gpu: #f0a050; --ok: #4cc38a; --warn: #ef6b5b; --both: #b37fd6; --idle: #95a3a6; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+#status { color: var(--muted); font-size: 13px; }
+#verdict { margin-left: auto; padding: 6px 12px; border-radius: 999px; font-weight: 650; color: #fff; background: var(--idle); }
+#verdictReason { color: var(--muted); font-size: 13px; width: 100%; text-align: right; }
+main { padding: 16px 20px; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); max-width: 1400px; margin: 0 auto; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+.wide { grid-column: 1 / -1; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.tile .k { color: var(--muted); font-size: 12px; }
+.tile .v { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .s { color: var(--muted); font-size: 12px; }
+canvas { width: 100%; height: 220px; display: block; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.legend i { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin-right: 5px; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+td, th { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+td.num { text-align: right; white-space: nowrap; }
+.bar { height: 6px; border-radius: 3px; background: var(--cpu); min-width: 1px; }
+.kind { color: var(--muted); font-size: 12px; }
+.Plugin .bar { background: var(--gpu); } .Host .bar { background: var(--both); } .Graphics .bar { background: var(--ok); }
+.note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.state-active { color: var(--ok); } .state-other { color: var(--warn); }
+code { font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FSPerf</h1>
+  <span id="status">connecting...</span>
+  <span id="verdict">-</span>
+  <span id="verdictReason"></span>
+</header>
+<main>
+  <section class="panel wide">
+    <div class="tiles">
+      <div class="tile"><div class="k">Main thread busy</div><div class="v" id="tMain">-</div><div class="s">of one core</div></div>
+      <div class="tile"><div class="k">GPU 3D</div><div class="v" id="tGpu">-</div><div class="s">busiest 3D engine</div></div>
+      <div class="tile"><div class="k">Game CPU</div><div class="v" id="tCpu">-</div><div class="s" id="tCores">of all cores</div></div>
+      <div class="tile"><div class="k">VRAM (game)</div><div class="v" id="tVram">-</div><div class="s">dedicated</div></div>
+      <div class="tile"><div class="k">RAM (game)</div><div class="v" id="tRam">-</div><div class="s" id="tPriv">working set</div></div>
+    </div>
+  </section>
+  <section class="panel wide">
+    <h2>Last 5 minutes</h2>
+    <canvas id="chart"></canvas>
+    <div class="legend"><span><i style="background:var(--cpu)"></i>main thread busy %</span><span><i style="background:var(--gpu)"></i>GPU 3D %</span></div>
+  </section>
+  <section class="panel">
+    <h2>Main thread: where the time goes</h2>
+    <table><thead><tr><th>Module</th><th>Kind</th><th style="width:35%"></th><th class="num">Share</th></tr></thead><tbody id="mods"></tbody></table>
+    <div class="note" id="modsNote">Sampled from outside the game. A plugin's share is the time spent in its own code (game code its hooks call counts as the game).</div>
+  </section>
+  <section class="panel">
+    <h2>Busiest game threads</h2>
+    <table><thead><tr><th>Thread</th><th style="width:45%"></th><th class="num">Busy (one core)</th></tr></thead><tbody id="threads"></tbody></table>
+  </section>
+  <section class="panel wide">
+    <h2>FSPluginHost plugins</h2>
+    <div id="fsp" class="note">-</div>
+  </section>
+</main>
+<script>
+const hist = [];             // {t, main, gpu}
+const HISTORY = 300;
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 0) => (typeof v === "number" && isFinite(v)) ? v.toFixed(d) : "-";
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const verdictColor = { "CPU-bound": "--cpu", "GPU-bound": "--gpu", "both near the limit": "--both", "neither": "--idle", "mixed": "--both" };
+
+function draw() {
+  const c = $("chart"), dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext("2d");
+  g.scale(dpr, dpr);
+  g.clearRect(0, 0, w, h);
+  const padL = 32, padB = 18, pw = w - padL - 6, ph = h - padB - 6;
+  g.strokeStyle = css("--line"); g.fillStyle = css("--muted"); g.font = "11px system-ui"; g.lineWidth = 1;
+  for (const y of [0, 50, 85, 100]) {
+    const yy = 6 + ph * (1 - y / 100);
+    g.beginPath(); g.moveTo(padL, yy); g.lineTo(padL + pw, yy); g.stroke();
+    g.fillText(y + "%", 2, yy + 4);
+  }
+  const line = (key, color) => {
+    g.strokeStyle = css(color); g.lineWidth = 2; g.beginPath();
+    let started = false;
+    hist.forEach((p, i) => {
+      const v = p[key];
+      if (typeof v !== "number" || !isFinite(v)) { started = false; return; }
+      const x = padL + pw * (i + HISTORY - hist.length) / (HISTORY - 1), y = 6 + ph * (1 - Math.min(100, v) / 100);
+      if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y);
+    });
+    g.stroke();
+  };
+  line("main", "--cpu");
+  line("gpu", "--gpu");
+}
+
+function render(s) {
+  if (!s || s.time === undefined) return;
+  $("status").textContent = s.attached ? `attached to ${s.process} (pid ${s.pid}), ${s.mainThreadSamples} samples this tick` : "waiting for the game";
+  const v = $("verdict");
+  v.textContent = s.verdict.label;
+  v.style.background = css(verdictColor[s.verdict.label] || "--idle");
+  $("verdictReason").textContent = s.verdict.reason + (s.note ? "  ·  " + s.note : "");
+  const num = x => (typeof x === "number") ? x : NaN;
+  $("tMain").textContent = fmt(num(s.mainThreadBusyPct)) + "%";
+  $("tGpu").textContent = fmt(num(s.gpu3DPct)) + "%";
+  $("tCpu").textContent = fmt(num(s.processCpuPct)) + "%";
+  $("tCores").textContent = `of ${s.cores} logical cores`;
+  $("tVram").textContent = isFinite(num(s.gpuDedicatedMb)) ? fmt(num(s.gpuDedicatedMb) / 1024, 1) + " GB" : "-";
+  $("tRam").textContent = fmt(num(s.workingSetMb) / 1024, 1) + " GB";
+  $("tPriv").textContent = `working set (private ${fmt(num(s.privateMb) / 1024, 1)} GB)`;
+  if (s.attached) {
+    hist.push({ t: s.time, main: num(s.mainThreadBusyPct), gpu: num(s.gpu3DPct) });
+    while (hist.length > HISTORY) hist.shift();
+  }
+  draw();
+  $("mods").innerHTML = (s.mainThreadModules || []).slice(0, 14).map(m =>
+    `<tr class="${esc(m.kind)}"><td>${esc(m.name)}</td><td class="kind">${esc(m.kind)}</td><td><div class="bar" style="width:${Math.max(0.5, m.percent)}%"></div></td><td class="num">${fmt(m.percent, 1)}%</td></tr>`).join("")
+    || `<tr><td colspan="4" class="kind">no samples</td></tr>`;
+  $("threads").innerHTML = (s.topThreads || []).map(t =>
+    `<tr><td>${t.main ? "<b>main</b> " : ""}${t.tid}</td><td><div class="bar" style="width:${Math.max(0.5, t.busyPct)}%"></div></td><td class="num">${fmt(t.busyPct)}%</td></tr>`).join("");
+  const f = s.fsp;
+  if (!f || !f.present) { $("fsp").textContent = "FSPluginHost not found (no fsp\\fsp.status.xml in the profile folder)."; return; }
+  const rows = f.plugins.map(p => {
+    const fields = Object.entries(p.fields || {}).map(([k, val]) => `<code>${esc(k)}=${esc(val)}</code>`).join(" ");
+    return `<tr><td>${esc(p.name)}</td><td>${esc(p.version)}</td><td class="${p.state === "active" ? "state-active" : "state-other"}">${esc(p.state)}${p.reason ? " – " + esc(p.reason) : ""}</td><td>${fields}</td></tr>`;
+  }).join("");
+  $("fsp").innerHTML = `<div>Host ${esc(f.version)}, channel ${esc(f.channel)}, ${esc(f.build)}${f.services.length ? ", services: " + f.services.map(esc).join(", ") : ""}</div>
+    <table><thead><tr><th>Plugin</th><th>Version</th><th>State</th><th>Counters it publishes</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function connect() {
+  const es = new EventSource("/events");
+  es.onmessage = e => { try { render(JSON.parse(e.data)); } catch (_) {} };
+  es.onerror = () => { $("status").textContent = "FSPerf not running? reconnecting..."; es.close(); setTimeout(connect, 2000); };
+}
+window.addEventListener("resize", draw);
+connect();
+</script>
+</body>
+</html>

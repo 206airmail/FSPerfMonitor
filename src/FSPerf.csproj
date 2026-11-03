@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>fsperf</AssemblyName>
+    <RootNamespace>FSPerf</RootNamespace>
+    <Version>0.1.0</Version>
+    <Product>FSPerf</Product>
+    <Copyright>Copyright (c) 2026 Jared Brown. MIT licence.</Copyright>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot\index.html" LogicalName="index.html" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,119 @@
+// Program.cs - FSPerf: a performance monitor for Farming Simulator 25, from outside the game. Copyright (c) 2026 Jared Brown.
+// MIT licence. See ..\README.md.
+//   fsperf [--port 8765] [--interval-ms 1000] [--sample-hz 250] [--record <file.csv>] [--pid <n>] [--profile <dir>]
+//          [--once] [--no-browser]
+//   fsperf --burn <seconds>     (self-test helper: one busy main thread)
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+
+namespace FSPerf;
+
+public sealed class Options
+{
+    public int Port = 8765;
+    public int IntervalMs = 1000;
+    public int SampleHz = 250;
+    public string? Record;
+    public int Pid;
+    public string ProfileDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "My Games", "FarmingSimulator2025");
+    public bool Once;
+    public bool NoBrowser;
+    public int Seconds;   // stop after this many seconds (0 = until Ctrl+C)
+
+    public static Options Parse(string[] a)
+    {
+        var o = new Options();
+        for (int i = 0; i < a.Length; i++) {
+            string Next() => i + 1 < a.Length ? a[++i] : throw new ArgumentException($"{a[i]} needs a value");
+            switch (a[i]) {
+                case "--port": o.Port = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                case "--interval-ms": o.IntervalMs = Math.Max(200, int.Parse(Next(), CultureInfo.InvariantCulture)); break;
+                case "--sample-hz": o.SampleHz = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                case "--record": o.Record = Next(); break;
+                case "--pid": o.Pid = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                case "--profile": o.ProfileDir = Next(); break;
+                case "--once": o.Once = true; break;
+                case "--no-browser": o.NoBrowser = true; break;
+                case "--seconds": o.Seconds = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                default: throw new ArgumentException($"unknown option {a[i]}");
+            }
+        }
+        return o;
+    }
+}
+
+public static class Program
+{
+    public const string Version = "0.1.0";
+    public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, NumberHandling =
+        System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
+
+    public static int Main(string[] args)
+    {
+        if (args.Length == 2 && args[0] == "--burn") return Burn(int.Parse(args[1], CultureInfo.InvariantCulture));
+        Options o;
+        try { o = Options.Parse(args); } catch (Exception e) { Console.Error.WriteLine($"fsperf: {e.Message}"); return 2; }
+        using var col = new Collector(o);
+        if (o.Once) {
+            col.Tick();
+            Thread.Sleep(o.IntervalMs);
+            Console.WriteLine(JsonSerializer.Serialize(col.Tick(), Json));
+            return 0;
+        }
+        using var rec = o.Record != null ? new CsvRecorder(o.Record) : null;
+        using var web = new WebServer(o.Port);
+        web.Start();
+        string url = $"http://127.0.0.1:{o.Port}/";
+        Console.WriteLine($"FSPerf {Version}: dashboard {url}  (Ctrl+C to stop){(rec != null ? "  recording " + o.Record : "")}");
+        if (!o.NoBrowser) {
+            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
+        }
+        var stop = new ManualResetEventSlim();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Set(); };
+        var until = o.Seconds > 0 ? DateTime.UtcNow.AddSeconds(o.Seconds) : DateTime.MaxValue;
+        col.Tick();
+        while (!stop.Wait(o.IntervalMs) && DateTime.UtcNow < until) {
+            var s = col.Tick();
+            web.Publish(JsonSerializer.Serialize(s, Json));
+            rec?.Write(s);
+        }
+        return 0;
+    }
+
+    // a process whose main thread spins: the self-test attaches to it (--pid) and must see ~100% main-thread busy
+    private static int Burn(int seconds)
+    {
+        var end = DateTime.UtcNow.AddSeconds(seconds);
+        double x = 0;
+        while (DateTime.UtcNow < end) for (int i = 0; i < 100000; i++) x += Math.Sqrt(i);
+        return x > 0 ? 0 : 1;
+    }
+}
+
+public sealed class CsvRecorder : IDisposable
+{
+    private readonly StreamWriter _w;
+
+    public CsvRecorder(string path)
+    {
+        _w = new StreamWriter(path, append: false, Encoding.UTF8) { AutoFlush = true };
+        _w.WriteLine("time,attached,pid,verdict,main_thread_busy_pct,process_cpu_pct,gpu_3d_pct,gpu_dedicated_mb,working_set_mb,private_mb," +
+                     "main_thread_samples,top_modules,fsp_version,fsp_plugins");
+    }
+
+    private static string Q(string s) => "\"" + s.Replace("\"", "\"\"") + "\"";
+    private static string N(double v) => double.IsNaN(v) ? "" : v.ToString("0.##", CultureInfo.InvariantCulture);
+
+    public void Write(Snapshot s)
+    {
+        string mods = string.Join("; ", s.MainThreadModules.Take(6).Select(m => $"{m.Name}={m.Percent.ToString("0.#", CultureInfo.InvariantCulture)}%"));
+        string plugins = string.Join("; ", s.Fsp.Plugins.Select(p => $"{p.Name}:{p.State}"));
+        _w.WriteLine(string.Join(",", s.Time.ToString("o", CultureInfo.InvariantCulture), s.Attached ? "1" : "0", s.Pid.ToString(CultureInfo.InvariantCulture),
+            Q(s.Verdict.Label), N(s.MainThreadBusyPct), N(s.ProcessCpuPct), N(s.Gpu3DPct), N(s.GpuDedicatedMb), N(s.WorkingSetMb), N(s.PrivateMb),
+            s.MainThreadSamples.ToString(CultureInfo.InvariantCulture), Q(mods), Q(s.Fsp.Version), Q(plugins)));
+    }
+
+    public void Dispose() => _w.Dispose();
+}

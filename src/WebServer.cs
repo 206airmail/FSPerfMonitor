@@ -53,6 +53,9 @@ public sealed class WebServer : IDisposable
             string path = line?.Split(' ').ElementAtOrDefault(1) ?? "/";
             if (line == null || !line.StartsWith("GET ")) { Send(stream, 405, "text/plain", Encoding.ASCII.GetBytes("GET only")); c.Close(); return; }
             if (path == "/events") {
+                // Publish writes on the sampling thread: a client that stops reading (full socket buffer) must not stall
+                // sampling, so a write that takes longer than 2 s throws and Publish drops that client
+                stream.WriteTimeout = 2000;
                 var w = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
                 w.Write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n");
                 w.Write($"data: {_last}\n\n");
@@ -81,7 +84,11 @@ public sealed class WebServer : IDisposable
         _last = json;
         lock (_lock) {
             for (int i = _clients.Count - 1; i >= 0; i--) {
-                try { _clients[i].Write($"data: {json}\n\n"); } catch { _clients.RemoveAt(i); }
+                try { _clients[i].Write($"data: {json}\n\n"); }
+                catch {
+                    try { _clients[i].Dispose(); } catch { }  // closes the socket too
+                    _clients.RemoveAt(i);
+                }
             }
         }
     }

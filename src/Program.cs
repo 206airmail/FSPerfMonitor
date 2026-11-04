@@ -54,7 +54,7 @@ public sealed class Options
 
 public static class Program
 {
-    public const string Version = "0.2.2";
+    public const string Version = "0.2.3";
     public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, NumberHandling =
         System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
 

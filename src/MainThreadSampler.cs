@@ -12,9 +12,10 @@ public sealed unsafe class MainThreadSampler : IDisposable
     private readonly object _lock = new();
     private readonly Dictionary<string, (ModuleKind kind, long count)> _window = new();
     private long _windowTotal, _failed;
-    private Thread? _thread;
-    private volatile bool _stop;
-    private IntPtr _threadHandle;
+    // one worker per Start: it owns its thread handle (closed by the worker itself on exit) and its stop flag, so a Stop()
+    // whose Join times out never closes a handle the worker may still be about to ResumeThread with
+    private sealed class Worker { public volatile bool Stop; public IntPtr Handle; public Thread? Thread; }
+    private Worker? _worker;
     private readonly ModuleMap _modules;
     public int Hz { get; }
     public long TotalSamples { get; private set; }
@@ -28,22 +29,23 @@ public sealed unsafe class MainThreadSampler : IDisposable
     public bool Start(uint threadId)
     {
         Stop();
-        _threadHandle = Native.OpenThread(Native.THREAD_SUSPEND_RESUME | Native.THREAD_GET_CONTEXT | Native.THREAD_QUERY_LIMITED_INFORMATION,
+        var h = Native.OpenThread(Native.THREAD_SUSPEND_RESUME | Native.THREAD_GET_CONTEXT | Native.THREAD_QUERY_LIMITED_INFORMATION,
             false, threadId);
-        if (_threadHandle == IntPtr.Zero) return false;
-        _stop = false;
-        _thread = new Thread(Loop) { IsBackground = true, Name = "fsperf-sampler", Priority = ThreadPriority.AboveNormal };
-        _thread.Start();
+        if (h == IntPtr.Zero) return false;
+        var w = new Worker { Handle = h };
+        w.Thread = new Thread(() => Loop(w)) { IsBackground = true, Name = "fsperf-sampler", Priority = ThreadPriority.AboveNormal };
+        _worker = w;
+        w.Thread.Start();
         return true;
     }
 
-    private void Loop()
+    private void Loop(Worker w)
     {
         IntPtr timer = Native.CreateWaitableTimerExW(IntPtr.Zero, null, Native.CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, Native.TIMER_ALL_ACCESS);
         void* ctx = NativeMemory.AlignedAlloc(Native.CONTEXT_SIZE, 16);
         long due = -(10_000_000L / Hz);  // relative, 100 ns units
         try {
-            while (!_stop) {
+            while (!w.Stop) {
                 if (timer != IntPtr.Zero && Native.SetWaitableTimer(timer, ref due, 0, IntPtr.Zero, IntPtr.Zero, false))
                     Native.WaitForSingleObject(timer, 1000);
                 else
@@ -51,14 +53,17 @@ public sealed unsafe class MainThreadSampler : IDisposable
                 ulong rip = 0;
                 bool ok = false;
                 // between Suspend and Resume: no allocation, no locks (the target thread may hold anything)
-                if (Native.SuspendThread(_threadHandle) != 0xFFFFFFFF) {
-                    NativeMemory.Clear(ctx, Native.CONTEXT_SIZE);
-                    *(uint*)((byte*)ctx + Native.CONTEXT_FLAGS_OFFSET) = Native.CONTEXT_CONTROL;
-                    ok = Native.GetThreadContext(_threadHandle, ctx);
-                    if (ok) rip = *(ulong*)((byte*)ctx + Native.CONTEXT_RIP_OFFSET);
-                    Native.ResumeThread(_threadHandle);
+                if (Native.SuspendThread(w.Handle) != 0xFFFFFFFF) {
+                    try {
+                        NativeMemory.Clear(ctx, Native.CONTEXT_SIZE);
+                        *(uint*)((byte*)ctx + Native.CONTEXT_FLAGS_OFFSET) = Native.CONTEXT_CONTROL;
+                        ok = Native.GetThreadContext(w.Handle, ctx);
+                        if (ok) rip = *(ulong*)((byte*)ctx + Native.CONTEXT_RIP_OFFSET);
+                    } finally {
+                        Native.ResumeThread(w.Handle);  // always: a suspended game main thread is a frozen game
+                    }
                 } else if (Marshal.GetLastWin32Error() != 0) {
-                    _stop = true;  // the thread is gone (game exited)
+                    w.Stop = true;  // the thread is gone (game exited)
                     break;
                 }
                 var m = ok ? _modules.Find(rip) : null;
@@ -74,6 +79,7 @@ public sealed unsafe class MainThreadSampler : IDisposable
         } finally {
             NativeMemory.AlignedFree(ctx);
             if (timer != IntPtr.Zero) Native.CloseHandle(timer);
+            Native.CloseHandle(w.Handle);  // the worker's own handle: closed only once it can no longer be used
         }
     }
 
@@ -94,17 +100,15 @@ public sealed unsafe class MainThreadSampler : IDisposable
         }
     }
 
-    public bool Running => _thread != null && _thread.IsAlive;
+    public bool Running => _worker?.Thread != null && _worker.Thread.IsAlive;
 
     public void Stop()
     {
-        _stop = true;
-        _thread?.Join(2000);
-        _thread = null;
-        if (_threadHandle != IntPtr.Zero) {
-            Native.CloseHandle(_threadHandle);
-            _threadHandle = IntPtr.Zero;
-        }
+        var w = _worker;
+        _worker = null;
+        if (w == null) return;
+        w.Stop = true;
+        w.Thread?.Join(2000);  // a worker still running after this exits by itself at its next loop check (and closes its handle)
     }
 
     public void Dispose() => Stop();

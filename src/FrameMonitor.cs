@@ -16,7 +16,8 @@ public sealed record FrameStats(
 
 public sealed class FrameMonitor : IDisposable
 {
-    private const string Session = "FSPerf";
+    // per FSPerf process: --stop_existing_session / --terminate_existing_session must never hit another instance's capture
+    private static readonly string Session = "FSPerf_" + Environment.ProcessId;
     private readonly string? _exe;
     private Process? _pm;
     private int _pid;
@@ -26,6 +27,9 @@ public sealed class FrameMonitor : IDisposable
     private string _state = "off", _hint = "";
     private readonly List<string> _stderr = new();
     private DateTime _lastStart = DateTime.MinValue;
+    // the capture generation: readers of a stopped capture must not write into the next one's state
+    private int _gen;
+    private readonly List<Thread> _readers = new();
 
     public FrameMonitor(string? explicitPath)
     {
@@ -95,15 +99,35 @@ public sealed class FrameMonitor : IDisposable
         _state = "starting";
         _hint = "";
         var pm = _pm;
-        new Thread(() => ReadCsv(pm)) { IsBackground = true, Name = "fsperf-presentmon" }.Start();
-        new Thread(() => { string? l; while ((l = pm.StandardError.ReadLine()) != null) lock (_lock) { if (_stderr.Count < 50) _stderr.Add(l); } }) {
-            IsBackground = true, Name = "fsperf-presentmon-err" }.Start();
+        int gen;
+        lock (_lock) gen = ++_gen;
+        // the readers are taken once, here: Process.StandardOutput throws once the Process is disposed
+        var outR = pm.StandardOutput;
+        var errR = pm.StandardError;
+        var tOut = new Thread(() => ReadCsv(pm, outR, gen)) { IsBackground = true, Name = "fsperf-presentmon" };
+        var tErr = new Thread(() => {
+            try {
+                string? l;
+                while ((l = errR.ReadLine()) != null) lock (_lock) { if (gen == _gen && _stderr.Count < 50) _stderr.Add(l); }
+            } catch { }  // the capture was stopped under us
+        }) { IsBackground = true, Name = "fsperf-presentmon-err" };
+        _readers.Clear();
+        _readers.Add(tOut);
+        _readers.Add(tErr);
+        tOut.Start();
+        tErr.Start();
     }
 
-    private void ReadCsv(Process pm)
+    private void ReadCsv(Process pm, StreamReader outR, int gen)
     {
-        string? header = pm.StandardOutput.ReadLine();
-        if (header == null) { Finished(pm); return; }
+        try { ReadCsvCore(pm, outR, gen); }
+        catch { }  // the capture was stopped under us: an old generation has nothing to report
+    }
+
+    private void ReadCsvCore(Process pm, StreamReader outR, int gen)
+    {
+        string? header = outR.ReadLine();
+        if (header == null) { Finished(pm, gen); return; }
         var cols = header.Split(',').Select(c => c.Trim()).ToList();
         int Col(params string[] names) { foreach (var n in names) { int i = cols.FindIndex(c => c.Equals(n, StringComparison.OrdinalIgnoreCase)); if (i >= 0) return i; } return -1; }
         int[] idx = {
@@ -111,28 +135,30 @@ public sealed class FrameMonitor : IDisposable
             Col("GPULatency"), Col("DisplayLatency", "MsUntilDisplayed"),
         };
         int mode = Col("PresentMode"), runtime = Col("PresentRuntime", "Runtime");
-        lock (_lock) { _state = "running"; _hint = idx[0] < 0 ? "PresentMon CSV has no FrameTime column: " + header : ""; }
+        lock (_lock) { if (gen != _gen) return; _state = "running"; _hint = idx[0] < 0 ? "PresentMon CSV has no FrameTime column: " + header : ""; }
         string? line;
-        while ((line = pm.StandardOutput.ReadLine()) != null) {
+        while ((line = outR.ReadLine()) != null) {
             var f = line.Split(',');
             var v = new double[idx.Length];
             for (int k = 0; k < idx.Length; k++)
                 v[k] = idx[k] >= 0 && idx[k] < f.Length && double.TryParse(f[idx[k]], NumberStyles.Float, CultureInfo.InvariantCulture, out double d) ? d : double.NaN;
             lock (_lock) {
+                if (gen != _gen) return;
                 if (_frames.Count < 100000) _frames.Add(v);
                 if (mode >= 0 && mode < f.Length) _presentMode = f[mode];
                 if (runtime >= 0 && runtime < f.Length) _runtime = f[runtime];
             }
         }
-        Finished(pm);
+        Finished(pm, gen);
     }
 
-    private void Finished(Process pm)
+    private void Finished(Process pm, int gen)
     {
         try { pm.WaitForExit(2000); } catch { }
         int code = -1;
         try { code = pm.ExitCode; } catch { }
         lock (_lock) {
+            if (gen != _gen) return;  // a stopped capture: the next one owns the state
             string err = string.Join(" ", _stderr.Where(s => s.Contains("error", StringComparison.OrdinalIgnoreCase)));
             if (err.Contains("access denied", StringComparison.OrdinalIgnoreCase) || code == 6) {
                 _state = "denied";
@@ -191,7 +217,10 @@ public sealed class FrameMonitor : IDisposable
     private void StopCapture()
     {
         if (_pm != null) {
+            lock (_lock) _gen++;  // its readers may still drain lines: they no longer count
             try { if (!_pm.HasExited) _pm.Kill(); } catch { }
+            foreach (var t in _readers) t.Join(1000);  // the pipes close with the process; then dispose
+            _readers.Clear();
             _pm.Dispose();
             _pm = null;
         }

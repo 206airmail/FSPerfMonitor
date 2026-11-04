@@ -17,9 +17,11 @@ public sealed class WebServer : IDisposable
     private readonly byte[] _page;
     private volatile bool _stop;
 
-    public WebServer(int port)
+    // lan = also reachable from other computers (all interfaces); still no URL reservation (a raw TcpListener), but Windows
+    // Firewall must allow the port inbound (Program prints the rule when it is missing)
+    public WebServer(int port, bool lan = false)
     {
-        _listener = new TcpListener(IPAddress.Loopback, port);
+        _listener = new TcpListener(lan ? IPAddress.Any : IPAddress.Loopback, port);
         using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("index.html")!;
         using var ms = new MemoryStream();
         s.CopyTo(ms);

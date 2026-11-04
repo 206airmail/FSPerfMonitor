@@ -17,9 +17,15 @@ build.ps1 -FetchPresentMon     (needs the .NET 8 SDK; downloads PresentMon 2.6.0
 fsperf                          dashboard on http://127.0.0.1:8765/, opens the browser, waits for the game
 fsperf --record run.csv         the same, plus one CSV line per tick
 fsperf --once                   one JSON snapshot to stdout (for scripts and test runners)
+fsperf --lan                    the dashboard also on the network: http://<this PC's IP>:8765/ (0.2.2)
    options: --port <n> --interval-ms <ms> --sample-hz <hz> --pid <n> --profile <dir> --seconds <n> --no-browser
-            --presentmon <exe> --no-frames
+            --presentmon <exe> --no-frames --lan
 ```
+
+`--lan` listens on all interfaces (no URL reservation needed). Other computers also need one inbound firewall rule,
+in an admin PowerShell: `New-NetFirewallRule -DisplayName 'FSPerf dashboard' -Direction Inbound -Protocol TCP -LocalPort
+8765 -Action Allow -Profile Private -RemoteAddress LocalSubnet` (FSPerf prints it). The rule works only while the
+network is set to Private. The dashboard is read-only.
 
 ## Full mode (0.2): per-frame CPU and GPU time
 

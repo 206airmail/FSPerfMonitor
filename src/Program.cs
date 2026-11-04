@@ -1,7 +1,9 @@
 // Program.cs - FSPerf: a performance monitor for Farming Simulator 25, from outside the game. Copyright (c) 2026 Jared Brown.
 // MIT licence. See ..\README.md.
 //   fsperf [--port 8765] [--interval-ms 1000] [--sample-hz 250] [--record <file.csv>] [--pid <n>] [--profile <dir>]
-//          [--once] [--no-browser] [--presentmon <exe>] [--no-frames]
+//          [--once] [--no-browser] [--presentmon <exe>] [--no-frames] [--lan]
+//   --lan: the dashboard is also reachable from other computers (http://<this PC's IP>:<port>/); needs an inbound firewall
+//          rule for the port (printed when missing). The page is read-only.
 //   fsperf --burn <seconds>     (self-test helper: one busy main thread)
 using System.Diagnostics;
 using System.Globalization;
@@ -23,6 +25,7 @@ public sealed class Options
     public int Seconds;   // stop after this many seconds (0 = until Ctrl+C)
     public string? PresentMon;  // full mode: PresentMon console exe (default: next to fsperf.exe or in tools\)
     public bool NoFrames;       // basic mode only
+    public bool Lan;            // listen on all interfaces, not only loopback
 
     public static Options Parse(string[] a)
     {
@@ -41,6 +44,7 @@ public sealed class Options
                 case "--seconds": o.Seconds = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                 case "--presentmon": o.PresentMon = Next(); break;
                 case "--no-frames": o.NoFrames = true; break;
+                case "--lan": o.Lan = true; break;
                 default: throw new ArgumentException($"unknown option {a[i]}");
             }
         }
@@ -50,7 +54,7 @@ public sealed class Options
 
 public static class Program
 {
-    public const string Version = "0.2.1";
+    public const string Version = "0.2.2";
     public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, NumberHandling =
         System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
 
@@ -73,10 +77,22 @@ public static class Program
             return 0;
         }
         using var rec = o.Record != null ? new CsvRecorder(o.Record) : null;
-        using var web = new WebServer(o.Port);
+        using var web = new WebServer(o.Port, o.Lan);
         web.Start();
         string url = $"http://127.0.0.1:{o.Port}/";
         Console.WriteLine($"FSPerf {Version}: dashboard {url}  (Ctrl+C to stop){(rec != null ? "  recording " + o.Record : "")}");
+        if (o.Lan) {
+            foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()) {
+                if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                foreach (var ua in ni.GetIPProperties().UnicastAddresses) {
+                    var ip = ua.Address;
+                    if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !System.Net.IPAddress.IsLoopback(ip) && !ip.ToString().StartsWith("169.254."))
+                        Console.WriteLine($"  on the network: http://{ip}:{o.Port}/");
+                }
+            }
+            Console.WriteLine($"  other computers need an inbound firewall rule for TCP {o.Port} (admin PowerShell, once):");
+            Console.WriteLine($"  New-NetFirewallRule -DisplayName 'FSPerf dashboard' -Direction Inbound -Protocol TCP -LocalPort {o.Port} -Action Allow -Profile Private -RemoteAddress LocalSubnet");
+        }
         if (!o.NoBrowser) {
             try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
         }

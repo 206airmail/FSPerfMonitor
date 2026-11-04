@@ -89,15 +89,29 @@ public sealed class Collector : IDisposable
         _mainTid = 0;
     }
 
+    private Snapshot Waiting(FspStatusInfo fsp, string why) =>
+        new Snapshot(DateTime.Now, "basic", false, 0, "", 0, Environment.ProcessorCount, 0, new(), double.NaN, double.NaN, 0, 0,
+            new(), 0, fsp, new Verdict("waiting", why), "", null, _elevated);
+
+    // the game can exit (or a run's game can be killed) between any two reads of a Process: then the Process members
+    // throw InvalidOperationException ("Process has exited") or Win32Exception. That is "the game went away", not a crash.
     public Snapshot Tick()
+    {
+        try { return TickCore(); }
+        catch (Exception e) when (e is InvalidOperationException || e is System.ComponentModel.Win32Exception) {
+            Detach();
+            return Waiting(FspStatus.Read(_o.ProfileDir), "the game exited");
+        }
+    }
+
+    private Snapshot TickCore()
     {
         var now = DateTime.UtcNow;
         var fsp = FspStatus.Read(_o.ProfileDir);
-        if (_proc == null || _proc.HasExited) {
-            if (!Attach()) {
-                return new Snapshot(DateTime.Now, "basic", false, 0, "", 0, Environment.ProcessorCount, 0, new(), double.NaN, double.NaN, 0, 0,
-                    new(), 0, fsp, new Verdict("waiting", "the game is not running"), "", null, _elevated);
-            }
+        bool gone;
+        try { gone = _proc == null || _proc.HasExited; } catch { gone = true; }
+        if (gone) {
+            if (!Attach()) return Waiting(fsp, "the game is not running");
             now = DateTime.UtcNow;
         }
         var p = _proc!;

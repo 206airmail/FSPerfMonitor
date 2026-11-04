@@ -51,6 +51,15 @@ foreach ($c in @(@('16.7', '16.0', '9.0', 'CPU-bound'), @('16.7', '8.0', '16.2',
 $j = & $exe --once --pid $PID | ConvertFrom-Json
 if (-not $j.elevated) { Check ($j.mode -eq 'basic' -and ($j.frames.state -in @('denied', 'off'))) "not elevated: full mode '$($j.frames.state)', basic mode used" }
 
+# the monitored process exits mid-run (a test run's game quits or is killed): FSPerf keeps running ("waiting"), no crash
+$b2 = Start-Process $exe -ArgumentList '--burn', '2' -PassThru -WindowStyle Hidden
+Start-Sleep -Milliseconds 400
+$mon = Start-Process $exe -ArgumentList '--no-browser', '--no-frames', '--pid', $b2.Id, '--seconds', '6', '--interval-ms', '250', '--port', '8799' -PassThru -WindowStyle Hidden -RedirectStandardError (Join-Path $env:TEMP 'fsperf_selftest_err.txt') -RedirectStandardOutput (Join-Path $env:TEMP 'fsperf_selftest_out.txt')
+$null = $mon.Handle   # keeps the handle, else ExitCode reads empty after the exit (PowerShell Start-Process quirk)
+$mon.WaitForExit(15000) | Out-Null
+$err = Get-Content (Join-Path $env:TEMP 'fsperf_selftest_err.txt') -Raw -ErrorAction SilentlyContinue
+Check ($mon.HasExited -and $mon.ExitCode -eq 0 -and "$err" -notmatch 'Unhandled exception') "the game exiting under the monitor is no crash (exit $($mon.ExitCode))"
+
 if ($fails) { Write-Host "FSPERF SELFTEST: $fails failure(s)"; exit 1 }
 Write-Host "FSPERF SELFTEST OK"
 exit 0

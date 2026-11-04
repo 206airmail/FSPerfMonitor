@@ -50,7 +50,7 @@ public sealed class Options
 
 public static class Program
 {
-    public const string Version = "0.2.0";
+    public const string Version = "0.2.1";
     public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, NumberHandling =
         System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
 
@@ -83,11 +83,18 @@ public static class Program
         var stop = new ManualResetEventSlim();
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Set(); };
         var until = o.Seconds > 0 ? DateTime.UtcNow.AddSeconds(o.Seconds) : DateTime.MaxValue;
-        col.Tick();
+        try { col.Tick(); } catch { }
+        string lastError = "";
         while (!stop.Wait(o.IntervalMs) && DateTime.UtcNow < until) {
-            var s = col.Tick();
-            web.Publish(JsonSerializer.Serialize(s, Json));
-            rec?.Write(s);
+            try {
+                var s = col.Tick();
+                web.Publish(JsonSerializer.Serialize(s, Json));
+                rec?.Write(s);
+                lastError = "";
+            } catch (Exception e) {   // one bad sample never ends the monitor (the game comes and goes all day)
+                if (e.Message != lastError) Console.Error.WriteLine($"FSPerf: sample failed ({e.GetType().Name}: {e.Message}); retrying");
+                lastError = e.Message;
+            }
         }
         return 0;
     }

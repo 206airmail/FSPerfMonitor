@@ -89,5 +89,7 @@ Don't sample during timing-sensitive A/B test runs unless both arms are sampled.
 - an idle process gets "neither"
 - the full-mode verdict rules on synthetic frames
 - without permission, full mode reports why and basic mode is used
+- the monitored process exiting mid-run is no crash (0.2.1: a game that quits or is killed between two reads used to end
+  FSPerf with "Process has exited"; now it goes back to "waiting for the game")
 
 MIT licence, Copyright (c) 2026 Jared Brown.

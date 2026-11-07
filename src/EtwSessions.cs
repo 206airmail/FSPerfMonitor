@@ -34,10 +34,15 @@ public static class EtwSessions
         try {
             using var p = Process.GetProcessById(pid);
             using var me = Process.GetCurrentProcess();
-            return !p.HasExited && (p.ProcessName.Equals(me.ProcessName, StringComparison.OrdinalIgnoreCase)
-                                    || p.ProcessName.Equals("fsperf", StringComparison.OrdinalIgnoreCase));
+            return !p.HasExited && IsFsperfProcessName(p.ProcessName, me.ProcessName);
         } catch { return false; }  // no such process
     }
+
+    // conservative: fsperf.exe, our own program name, or dotnet (`dotnet fsperf.dll`) all count as live - a session is
+    // stopped only when its pid is gone or clearly some other program
+    public static bool IsFsperfProcessName(string name, string ownName)
+        => name.Equals(ownName, StringComparison.OrdinalIgnoreCase) || name.Equals("fsperf", StringComparison.OrdinalIgnoreCase)
+           || name.Equals("dotnet", StringComparison.OrdinalIgnoreCase);
 
     private static (int Code, string Out) Logman(string args)
     {

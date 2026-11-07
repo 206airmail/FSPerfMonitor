@@ -55,6 +55,10 @@ $stale2 = @($logman2 | & $exe --stale-sessions 222)
 Check (($stale2 -join ',') -eq 'FSPerf_111') "stale sessions: dead fsperf's session stopped, live one and foreign ones kept ($($stale2 -join ','))"
 Check ($stale.Count -eq 0) "stale sessions: only lines that start with FSPerf_<digits> count ($($stale -join ','))"
 # the unprivileged cleanup on this machine must not crash fsperf (errors are logged, not fatal)
+foreach ($c in @(@('fsperf', 'live'), @('FSPerf', 'live'), @('dotnet', 'live'), @('notepad', 'other'))) {
+    $r = & $exe --is-fsperf-name $c[0]
+    Check ($r -eq $c[1]) "a live '$($c[0])' process -> its ETW session is $(if ($c[1] -eq 'live') { 'kept' } else { 'stale' })"
+}
 # without admin / Performance Log Users, full mode reports why and basic mode goes on
 $j = & $exe --once --pid $PID | ConvertFrom-Json
 if (-not $j.elevated) { Check ($j.mode -eq 'basic' -and ($j.frames.state -in @('denied', 'off'))) "not elevated: full mode '$($j.frames.state)', basic mode used" }

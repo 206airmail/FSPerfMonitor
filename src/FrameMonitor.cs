@@ -44,7 +44,19 @@ public sealed class FrameMonitor : IDisposable
         // every normal exit path (Ctrl+C, console close, unhandled exception) stops our session; a kill cannot, the next start cleans up
         AppDomain.CurrentDomain.ProcessExit += (_, _) => EtwSessions.Stop(Session);
         AppDomain.CurrentDomain.UnhandledException += (_, _) => EtwSessions.Stop(Session);
+        // closing the console window / logoff / shutdown ends the process without ProcessExit; Windows allows ~5 s here.
+        // Ctrl+C / Ctrl+Break are left to Console.CancelKeyPress (graceful exit through Dispose).
+        try {
+            _ctrlHandler = ct => {
+                if (ct == ConsoleCtrl.CTRL_CLOSE_EVENT || ct == ConsoleCtrl.CTRL_LOGOFF_EVENT || ct == ConsoleCtrl.CTRL_SHUTDOWN_EVENT)
+                    EtwSessions.Stop(Session);
+                return false;  // the default handler still ends the process
+            };
+            ConsoleCtrl.SetConsoleCtrlHandler(_ctrlHandler, true);
+        } catch { }
     }
+
+    private static ConsoleCtrl.Handler? _ctrlHandler;  // static: the delegate must outlive the native registration
 
     // header watchdog: PresentMon is running but has printed no CSV header (no events reach it, e.g. a starved or half-dead
     // ETW session) for this long -> restart the capture once per game process, and say why

@@ -92,3 +92,10 @@ internal static unsafe class Native
     // PDH_FMT_COUNTERVALUE_ITEM_W: { wchar_t* szName; { DWORD CStatus; (pad) double value } } = 24 bytes
     public const int PDH_ITEM_SIZE = 24;
 }
+
+internal static class ConsoleCtrl
+{
+    public delegate bool Handler(uint ctrlType);
+    [DllImport("kernel32.dll", SetLastError = true)] public static extern bool SetConsoleCtrlHandler(Handler handler, bool add);
+    public const uint CTRL_CLOSE_EVENT = 2, CTRL_LOGOFF_EVENT = 5, CTRL_SHUTDOWN_EVENT = 6;
+}

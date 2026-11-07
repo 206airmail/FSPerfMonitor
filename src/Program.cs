@@ -72,6 +72,10 @@ public static class Program
             foreach (var n in EtwSessions.Stale(EtwSessions.Parse(Console.In.ReadToEnd()), -1, live.Contains)) Console.WriteLine(n);
             return 0;
         }
+        if (args.Length == 2 && args[0] == "--is-fsperf-name") {  // self-test helper: would a live process of this name keep its ETW session?
+            Console.WriteLine(EtwSessions.IsFsperfProcessName(args[1], "fsperf") ? "live" : "other");
+            return 0;
+        }
         Options o;
         try { o = Options.Parse(args); } catch (Exception e) { Console.Error.WriteLine($"fsperf: {e.Message}"); return 2; }
         using var col = new Collector(o);

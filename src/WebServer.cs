@@ -1,5 +1,6 @@
 // WebServer.cs - the dashboard on http://127.0.0.1:<port>/ (loopback only, no admin rights, no URL reservations):
 // GET / = the page, GET /api/snapshot = the last snapshot as JSON, GET /events = server-sent events, one per tick.
+// 0.3: GET /log = the log page, GET /log/stream = the game's log.txt as server-sent events (see LogTail).
 // A minimal HTTP/1.1 server on a TcpListener. Copyright (c) 2026 Jared Brown. MIT licence.
 using System.Net;
 using System.Net.Sockets;
@@ -12,6 +13,10 @@ public sealed class WebServer : IDisposable
 {
     private readonly TcpListener _listener;
     private readonly List<StreamWriter> _clients = new();
+    private readonly List<StreamWriter> _logClients = new();   // under _tail.Gate
+    private readonly LogTail? _tail;
+    private readonly byte[] _logPage;
+    private const int MaxLogClients = 8;
     private const int MaxEventClients = 16;
     private const int RequestDeadlineMs = 10000;
     private int _reserved;  // live-view slots taken but not yet registered (under _lock)
@@ -22,13 +27,19 @@ public sealed class WebServer : IDisposable
 
     // lan = also reachable from other computers (all interfaces); still no URL reservation (a raw TcpListener), but Windows
     // Firewall must allow the port inbound (Program prints the rule when it is missing)
-    public WebServer(int port, bool lan = false)
+    public WebServer(int port, bool lan = false, LogTail? tail = null)
     {
+        _tail = tail;
+        if (tail != null) { tail.Appended += OnLogAppended; tail.Heartbeat += OnLogHeartbeat; }
         _listener = new TcpListener(lan ? IPAddress.Any : IPAddress.Loopback, port);
         using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("index.html")!;
         using var ms = new MemoryStream();
         s.CopyTo(ms);
         _page = ms.ToArray();
+        using var s2 = Assembly.GetExecutingAssembly().GetManifestResourceStream("log.html")!;
+        using var ms2 = new MemoryStream();
+        s2.CopyTo(ms2);
+        _logPage = ms2.ToArray();
     }
 
     public void Start()
@@ -57,12 +68,15 @@ public sealed class WebServer : IDisposable
             string? line = ReadLineBounded(stream, 2048, deadline);
             if (line == null) { c.Close(); return; }
             int headers = 0;
+            string lastEventId = "";
             while (true) {
                 string? h = ReadLineBounded(stream, 8192, deadline);
                 if (h == null || ++headers > 100) { c.Close(); return; }
                 if (h.Length == 0) break;  // end of the headers
+                if (h.StartsWith("Last-Event-ID:", StringComparison.OrdinalIgnoreCase)) lastEventId = h[14..].Trim();
             }
             string path = line.Split(' ').ElementAtOrDefault(1) ?? "/";
+            string route = path.Split('?')[0];
             if (!line.StartsWith("GET ")) { Send(stream, 405, "text/plain", Encoding.ASCII.GetBytes("GET only")); c.Close(); return; }
             if (path == "/events") {
                 // reserve a live-view slot atomically (check + reserve under one lock), released when registered or failed
@@ -88,12 +102,96 @@ public sealed class WebServer : IDisposable
                 }
                 return;  // kept open; Publish writes to it
             }
+            if (route == "/log/stream" && _tail != null) {
+                ServeLogStream(c, stream, path, lastEventId);
+                return;  // kept open; the tail writes to it
+            }
+            if (route == "/log") { Send(stream, 200, "text/html; charset=utf-8", _logPage); c.Close(); return; }
             if (path == "/api/snapshot") Send(stream, 200, "application/json", Encoding.UTF8.GetBytes(_last));
             else if (path == "/" || path.StartsWith("/?")) Send(stream, 200, "text/html; charset=utf-8", _page);
             else Send(stream, 404, "text/plain", Encoding.ASCII.GetBytes("not found"));
             c.Close();
         } catch {
             try { c.Close(); } catch { }
+        }
+    }
+
+    // ---- the log stream -------------------------------------------------------------------------------------------
+    // GET /log/stream?n=500[&after=<epoch>.<seq>]  (or the Last-Event-ID header a reconnecting EventSource sends).
+    // Each event: `id: <epoch>.<last seq in it>` and data {"e":epoch,"reset":bool,"gap":bool,"lines":[[seq,text,marker],...]}.
+    // reset = the client should drop what it shows (a fresh view); gap = lines between its last id and the first line here were
+    // already pushed out of the ring.
+    private void ServeLogStream(TcpClient c, NetworkStream stream, string path, string lastEventId)
+    {
+        var tail = _tail!;
+        int n = 500;
+        string after = lastEventId;
+        int q = path.IndexOf('?');
+        if (q >= 0) {
+            foreach (var kv in path[(q + 1)..].Split('&')) {
+                int eq = kv.IndexOf('=');
+                if (eq < 0) continue;
+                string k = kv[..eq], v = Uri.UnescapeDataString(kv[(eq + 1)..]);
+                if (k == "n" && int.TryParse(v, out int nn)) n = Math.Clamp(nn, 0, tail.RingSize);
+                else if (k == "after" && v.Length > 0) after = v;
+            }
+        }
+        long afterSeq = -1;
+        bool resumed = false;
+        int dot = after.IndexOf('.');
+        if (dot > 0 && after[..dot] == tail.Epoch && long.TryParse(after[(dot + 1)..], out long a) && a >= 0) { afterSeq = a; resumed = true; }
+        try {
+            stream.WriteTimeout = 2000;   // a stalled phone must not stall the tailer
+            var w = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
+            lock (tail.Gate) {            // snapshot + register under one lock: no gap, no duplicate between history and live
+                if (_logClients.Count >= MaxLogClients) {
+                    Send(stream, 503, "text/plain", Encoding.ASCII.GetBytes("too many log views"));
+                    c.Close();
+                    return;
+                }
+                if (resumed && afterSeq > tail.LastSeq) { afterSeq = -1; resumed = false; }
+                var lines = tail.Snapshot(afterSeq, n, out bool gap);
+                w.Write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nX-Accel-Buffering: no\r\nConnection: keep-alive\r\n\r\nretry: 2000\n\n");
+                if (lines.Count > 0 || !resumed) w.Write(LogEvent(tail, lines, !resumed, gap, lines.Count > 0 ? lines[^1].Seq : tail.LastSeq));
+                _logClients.Add(w);
+            }
+        } catch {
+            try { c.Close(); } catch { }
+        }
+    }
+
+    private static string LogEvent(LogTail tail, IReadOnlyList<LogLine> lines, bool reset, bool gap, long lastSeq)
+    {
+        var sb = new StringBuilder(64 + lines.Count * 120);
+        sb.Append("id: ").Append(tail.Epoch).Append('.').Append(lastSeq).Append("\ndata: {\"e\":\"").Append(tail.Epoch).Append("\",\"reset\":")
+          .Append(reset ? "true" : "false").Append(",\"gap\":").Append(gap ? "true" : "false").Append(",\"lines\":[");
+        for (int i = 0; i < lines.Count; i++) {
+            if (i > 0) sb.Append(',');
+            sb.Append('[').Append(lines[i].Seq).Append(',').Append(System.Text.Json.JsonSerializer.Serialize(lines[i].Text, LogJson))
+              .Append(lines[i].Marker ? ",1]" : ",0]");
+        }
+        return sb.Append("]}\n\n").ToString();
+    }
+
+    private static readonly System.Text.Json.JsonSerializerOptions LogJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    // both run under tail.Gate
+    private void OnLogAppended(IReadOnlyList<LogLine> lines)
+    {
+        if (_logClients.Count == 0) return;
+        WriteLogClients(LogEvent(_tail!, lines, false, false, lines[^1].Seq));
+    }
+
+    private void OnLogHeartbeat() { if (_logClients.Count > 0) WriteLogClients(": keep-alive\n\n"); }
+
+    private void WriteLogClients(string text)
+    {
+        for (int i = _logClients.Count - 1; i >= 0; i--) {
+            try { _logClients[i].Write(text); }
+            catch {
+                try { _logClients[i].Dispose(); } catch { }
+                _logClients.RemoveAt(i);
+            }
         }
     }
 
@@ -139,6 +237,7 @@ public sealed class WebServer : IDisposable
     public void Dispose()
     {
         _stop = true;
+        if (_tail != null) { _tail.Appended -= OnLogAppended; _tail.Heartbeat -= OnLogHeartbeat; }
         try { _listener.Stop(); } catch { }
     }
 }

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FSPerf log</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5f6b7a; --line: #e2e6eb; --accent: #2f6fdb;
+  --err: #b3261e; --errbg: #fdecea; --warn: #8a5a00; --warnbg: #fff4d6; --pass: #1a7f37; --mark: #6b4fbb;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111418; --panel: #1a1f25; --ink: #e8ecf1; --muted: #9aa6b4; --line: #2a313a; --accent: #5b93f0;
+          --err: #ff8f84; --errbg: #3a1d1b; --warn: #e8b84a; --warnbg: #3a2f14; --pass: #56d364; --mark: #b79cf0; }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+       display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; display: grid; gap: 8px; flex: none; }
+.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 17px; margin: 0; font-weight: 650; }
+a.nav { color: var(--accent); text-decoration: none; font-weight: 600; padding: 6px 0; }
+#status { color: var(--muted); font-size: 13px; margin-left: auto; text-align: right; }
+#status.live::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--pass); margin-right: 6px; }
+#status.off::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--err); margin-right: 6px; }
+.bar { display: flex; gap: 8px; flex-wrap: wrap; }
+#filter { flex: 1 1 100%; min-width: 0; font: inherit; font-size: 16px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+          background: var(--bg); color: var(--ink); }
+button { font: inherit; font-size: 14px; min-height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line);
+         background: var(--bg); color: var(--ink); cursor: pointer; }
+button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+#log { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overflow-anchor: none; padding: 8px 16px;
+       -webkit-overflow-scrolling: touch; overscroll-behavior: contain; position: relative; }
+.l { font: 12px/1.4 ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
+     padding: 1px 0 1px 6px; border-left: 3px solid transparent; }
+.l.err { color: var(--err); background: var(--errbg); border-left-color: var(--err); }
+.l.warn { color: var(--warn); background: var(--warnbg); border-left-color: var(--warn); }
+.l.fail { color: var(--err); background: var(--errbg); border-left-color: var(--err); font-weight: 700; }
+.l.pass { color: var(--pass); border-left-color: var(--pass); }
+.l.mk { color: var(--mark); border-left-color: var(--mark); font-weight: 700; padding: 4px 0 4px 6px; }
+#empty { color: var(--muted); padding: 16px 0; }
+#jump { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); display: none; min-height: 44px; padding: 0 16px;
+        background: var(--accent); color: #fff; border: 0; border-radius: 22px; font-weight: 650; box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+#jump.show { display: block; }
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>FSPerf log</h1>
+    <a class="nav" href="/">Dashboard</a>
+    <span id="status" class="off">connecting...</span>
+  </div>
+  <div class="bar">
+    <input id="filter" type="search" placeholder="Filter (substring, ignores case)" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button id="bErr" aria-pressed="false">Errors</button>
+    <button id="bWarn" aria-pressed="false">Warnings</button>
+    <button id="bFail" aria-pressed="false">FAIL</button>
+    <button id="bPause" aria-pressed="false">Pause</button>
+    <button id="bClear">Clear</button>
+  </div>
+</header>
+<div id="log"><div id="empty">waiting for lines...</div></div>
+<button id="jump">Jump to live &#8595;</button>
+<script>
+const $ = id => document.getElementById(id);
+const KEEP = 10000, DOMCAP = 3000, PARAM_N = 500;
+const logEl = $("log");
+let model = [];            // {seq, text, cls}; the last KEEP lines received
+let held = [];             // lines that arrived while paused
+let paused = false, stick = true, lastId = "", connected = false, totalSeen = 0, shownCount = 0, haveGap = false;
+const on = { err: false, warn: false, fail: false };
+let needle = "";
+
+function classify(text, marker) {
+  if (marker) return "mk";
+  if (text.includes("FAIL")) return "fail";
+  if (text.includes("Error") || text.includes("ERROR")) return "err";
+  if (text.includes("Warning") || text.includes("WARNING")) return "warn";
+  if (text.includes("PASS")) return "pass";
+  return "";
+}
+function matches(m) {
+  if (m.cls === "mk") return true;                       // markers always stay visible
+  if (needle && !m.text.toLowerCase().includes(needle)) return false;
+  if (on.err || on.warn || on.fail) {
+    return (on.err && m.cls === "err") || (on.warn && m.cls === "warn") || (on.fail && m.cls === "fail");
+  }
+  return true;
+}
+function lineEl(m) {
+  const d = document.createElement("div");
+  d.className = "l" + (m.cls ? " " + m.cls : "");
+  d.textContent = m.text === "" ? " " : m.text;
+  return d;
+}
+function atBottom() { return logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40; }
+function toBottom() { logEl.scrollTop = logEl.scrollHeight; }
+function updateJump() { $("jump").classList.toggle("show", !stick); }
+
+function setStatus() {
+  const s = $("status");
+  s.className = connected ? "live" : "off";
+  const n = model.length;
+  s.textContent = (connected ? "live" : "reconnecting...") + " · " + n.toLocaleString() + " lines" + (shownCount !== n ? " (" + shownCount.toLocaleString() + " shown)" : "")
+    + (paused ? " · paused" + (held.length ? " (+" + held.length + ")" : "") : "");
+  $("bPause").textContent = paused ? "Resume" + (held.length ? " (" + held.length + ")" : "") : "Pause";
+}
+
+function rebuild() {
+  const frag = document.createDocumentFragment();
+  const vis = [];
+  for (let i = model.length - 1; i >= 0 && vis.length < DOMCAP; i--) if (matches(model[i])) vis.push(model[i]);
+  vis.reverse();
+  for (const m of vis) frag.appendChild(lineEl(m));
+  logEl.textContent = "";
+  if (!vis.length) { const e = document.createElement("div"); e.id = "empty"; e.textContent = model.length ? "no line matches the filter" : "waiting for lines..."; logEl.appendChild(e); }
+  else logEl.appendChild(frag);
+  shownCount = vis.length;
+  if (stick) toBottom();
+  setStatus();
+}
+
+function addLines(arr) {            // arr: [{seq,text,cls}], not paused
+  if (!arr.length) return;
+  for (const m of arr) model.push(m);
+  if (model.length > KEEP) model.splice(0, model.length - KEEP);
+  const add = arr.filter(matches);
+  const empty = $("empty");
+  if (empty && add.length) empty.remove();
+  if (add.length) {
+    // drop the oldest DOM lines first; when the user has scrolled up, keep the view where it was
+    let over = logEl.children.length + add.length - DOMCAP;
+    if (over > 0) {
+      const h0 = logEl.scrollHeight;
+      while (over-- > 0 && logEl.firstChild) logEl.removeChild(logEl.firstChild);
+      if (!stick) logEl.scrollTop -= h0 - logEl.scrollHeight;
+    }
+    const frag = document.createDocumentFragment();
+    for (const m of add) frag.appendChild(lineEl(m));
+    logEl.appendChild(frag);
+    shownCount = logEl.children.length;
+    if (stick) toBottom();
+  }
+  setStatus();
+}
+
+function onBatch(b) {
+  if (b.reset) { model = []; held = []; haveGap = false; stick = true; }
+  const arr = [];
+  if (b.gap) arr.push({ seq: 0, text: "=== some lines were missed while this page was disconnected ===", cls: "mk" });
+  for (const l of b.lines) arr.push({ seq: l[0], text: l[1], cls: classify(l[1], l[2] === 1) });
+  totalSeen += b.lines.length;
+  if (b.reset) { rebuildWith(arr); return; }
+  if (paused) { held.push(...arr); if (held.length > KEEP) held.splice(0, held.length - KEEP); setStatus(); }
+  else addLines(arr);
+}
+function rebuildWith(arr) {
+  for (const m of arr) model.push(m);
+  if (model.length > KEEP) model.splice(0, model.length - KEEP);
+  rebuild();
+}
+
+let es = null, retry = null;
+function connect() {
+  clearTimeout(retry);
+  if (es) { es.close(); es = null; }
+  es = new EventSource("/log/stream?n=" + PARAM_N + (lastId ? "&after=" + encodeURIComponent(lastId) : ""));
+  es.onopen = () => { connected = true; setStatus(); };
+  es.onmessage = e => {
+    connected = true;
+    if (e.lastEventId) lastId = e.lastEventId;
+    try { onBatch(JSON.parse(e.data)); } catch (_) {}
+  };
+  es.onerror = () => {
+    connected = false; setStatus();
+    // the browser reconnects by itself (with Last-Event-ID); if it gave up (HTTP error), try again by hand
+    if (es.readyState === 2) { es.close(); es = null; retry = setTimeout(connect, 3000); }
+  };
+}
+
+logEl.addEventListener("scroll", () => { stick = atBottom(); updateJump(); }, { passive: true });
+$("jump").onclick = () => { stick = true; toBottom(); updateJump(); };
+function toggle(id, key) {
+  $(id).onclick = () => { on[key] = !on[key]; $(id).setAttribute("aria-pressed", on[key]); rebuild(); updateJump(); };
+}
+toggle("bErr", "err"); toggle("bWarn", "warn"); toggle("bFail", "fail");
+let ft = null;
+$("filter").addEventListener("input", e => {
+  clearTimeout(ft);
+  ft = setTimeout(() => { needle = e.target.value.trim().toLowerCase(); rebuild(); }, 120);
+});
+$("bPause").onclick = () => {
+  paused = !paused;
+  $("bPause").setAttribute("aria-pressed", paused);
+  if (!paused && held.length) { const h = held; held = []; addLines(h); }
+  setStatus();
+};
+$("bClear").onclick = () => { model = []; held = []; rebuild(); };   // view only: the log file and the server are untouched
+window.addEventListener("resize", () => { if (stick) toBottom(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !es) connect(); });
+setStatus();
+connect();
+</script>
+</body>
+</html>

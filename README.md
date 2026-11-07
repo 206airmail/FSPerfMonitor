@@ -27,6 +27,26 @@ in an admin PowerShell: `New-NetFirewallRule -DisplayName 'FSPerf dashboard' -Di
 8765 -Action Allow -Profile Private -RemoteAddress LocalSubnet` (FSPerf prints it). The rule works only while the
 network is set to Private. The dashboard is read-only.
 
+## Game log view (0.3)
+
+`http://127.0.0.1:8765/log` (linked from the dashboard, and back) streams the game's `<profile>\log.txt` live. It is built
+for a phone in portrait (`--lan`): wrapping monospace text, no sideways scroll, auto-scroll that pauses when you scroll
+up with a "Jump to live" button, a case-insensitive filter, Errors / Warnings / FAIL toggles (FS25 `Error:` / `Warning:`
+lines and FSPAutoTest `FAIL`; errors, warnings, FAIL and PASS lines are coloured), Pause, and Clear (clears the view
+only). The page keeps the last 10,000 lines and shows at most 3,000 at a time.
+
+- **Server:** every 400 ms it reads only the bytes the game appended (a stat-sized check when nothing changed; a 100+ MB
+  log is never read whole: it starts from the last 1 MB). The newest 5,000 lines are kept in memory, so a client gets the
+  recent history at once. Partial last lines wait for their newline.
+- **Restart:** the game rewrites `log.txt` on every start. FSPerf notices (file identity, size shrinking, or a changed
+  header) and sends a "log restarted" marker, then the new lines.
+- **Endpoint:** `GET /log/stream?n=500` is server-sent events in batches: `id: <epoch>.<seq>`, data
+  `{"e","reset","gap","lines":[[seq,text,marker],...]}`. A reconnecting browser sends `Last-Event-ID` (or `&after=<id>`)
+  and gets exactly the missed lines, none twice; if the ring no longer holds them the page shows a "lines were missed"
+  marker. At most 8 log viewers at a time.
+- **Privacy:** the view shows the whole `log.txt` (file paths, mod names, user names in paths) to everyone who can reach
+  the dashboard. With `--lan` that is everyone on your private network. It is read-only.
+
 ## Full mode (0.2): per-frame CPU and GPU time
 
 When FSPerf may read Windows' presentation events, it starts Intel's PresentMon console (MIT, signed by Intel; found
@@ -95,6 +115,9 @@ Don't sample during timing-sensitive A/B test runs unless both arms are sampled.
 - an idle process gets "neither"
 - the full-mode verdict rules on synthetic frames
 - without permission, full mode reports why and basic mode is used
+- the log tailer on temp files (appends, a partial line completed later, truncate and recreate = restart marker, ring
+  bounds, resume from a sequence id, a huge first read, an endless line), then the log stream end to end on port 8799
+  with a fake profile
 - the monitored process exiting mid-run is no crash (0.2.1: a game that quits or is killed between two reads used to end
   FSPerf with "Process has exited"; now it goes back to "waiting for the game")
 

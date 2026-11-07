@@ -54,7 +54,7 @@ public sealed class Options
 
 public static class Program
 {
-    public const string Version = "0.2.4";
+    public const string Version = "0.3.0";
     public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, NumberHandling =
         System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
 
@@ -76,6 +76,7 @@ public static class Program
             Console.WriteLine(EtwSessions.IsFsperfProcessName(args[1], "fsperf") ? "live" : "other");
             return 0;
         }
+        if (args.Length == 1 && args[0] == "--logtail-selftest") return LogTailSelfTest.Run();   // self-test helper
         Options o;
         try { o = Options.Parse(args); } catch (Exception e) { Console.Error.WriteLine($"fsperf: {e.Message}"); return 2; }
         using var col = new Collector(o);
@@ -86,8 +87,10 @@ public static class Program
             return 0;
         }
         using var rec = o.Record != null ? new CsvRecorder(o.Record) : null;
-        using var web = new WebServer(o.Port, o.Lan);
+        using var tail = new LogTail(Path.Combine(o.ProfileDir, "log.txt"));
+        using var web = new WebServer(o.Port, o.Lan, tail);
         web.Start();
+        tail.Start();
         string url = $"http://127.0.0.1:{o.Port}/";
         Console.WriteLine($"FSPerf {Version}: dashboard {url}  (Ctrl+C to stop){(rec != null ? "  recording " + o.Record : "")}");
         if (o.Lan) {

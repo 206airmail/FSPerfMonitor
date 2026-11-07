@@ -72,6 +72,42 @@ $mon.WaitForExit(15000) | Out-Null
 $err = Get-Content (Join-Path $env:TEMP 'fsperf_selftest_err.txt') -Raw -ErrorAction SilentlyContinue
 Check ($mon.HasExited -and $mon.ExitCode -eq 0 -and "$err" -notmatch 'Unhandled exception') "the game exiting under the monitor is no crash (exit $($mon.ExitCode))"
 
+# 0.3 log tail: the tailer against temp files (appends, partial line, truncate/recreate, ring bounds, resume)
+$lt = & $exe --logtail-selftest
+$lt | ForEach-Object { Write-Host $_ }
+Check ($LASTEXITCODE -eq 0 -and ($lt -join "`n") -match 'LOGTAIL SELFTEST OK') "log tailer checks passed"
+
+# 0.3 log stream end to end: a fake profile dir with a temp log.txt, FSPerf on port 8799
+$prof = Join-Path $env:TEMP ('fsperf_selftest_prof_' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+New-Item -ItemType Directory $prof | Out-Null
+$logf = Join-Path $prof 'log.txt'
+[IO.File]::WriteAllText($logf, "first line`nWarning: something odd`n")
+$srv = Start-Process $exe -ArgumentList '--no-browser', '--no-frames', '--profile', "`"$prof`"", '--seconds', '30', '--port', '8799' -PassThru -WindowStyle Hidden
+try {
+    Start-Sleep -Milliseconds 1200
+    $page = (curl.exe -s http://127.0.0.1:8799/log) -join "`n"
+    Check ($page -match '<title>FSPerf log</title>' -and $page -match 'href="/"') "GET /log serves the log page (links back to the dashboard)"
+    Check (((curl.exe -s http://127.0.0.1:8799/) -join "`n") -match 'href="/log"') "the dashboard links to /log"
+    $first = (curl.exe -siN --max-time 2 'http://127.0.0.1:8799/log/stream?n=10') -join "`n"
+    Check ($first -match 'text/event-stream' -and $first -match '"reset":true' -and $first -match 'first line' -and $first -match 'Warning: something odd') "stream: a new client gets the recent lines first"
+    $lastId = ([regex]::Matches($first, '(?m)^id: (\S+)') | Select-Object -Last 1).Groups[1].Value
+    $f = [IO.File]::Open($logf, 'Append', 'Write', 'ReadWrite, Delete')
+    $b = [Text.Encoding]::UTF8.GetBytes("added while away`nError: boom`n"); $f.Write($b, 0, $b.Length); $f.Flush()
+    Start-Sleep -Milliseconds 1000
+    $resumed = (curl.exe -sN --max-time 2 -H "Last-Event-ID: $lastId" 'http://127.0.0.1:8799/log/stream?n=10') -join "`n"
+    Check ($resumed -match 'added while away' -and $resumed -match '"reset":false' -and $resumed -notmatch 'first line') "stream: Last-Event-ID resumes without duplicates ($lastId)"
+    # live push: connect, append mid-stream, the line must arrive in the same connection
+    $job = Start-Job { param($id, $u) curl.exe -sN --max-time 3 -H "Last-Event-ID: $id" $u } -ArgumentList $lastId, 'http://127.0.0.1:8799/log/stream'
+    Start-Sleep -Milliseconds 800
+    $b = [Text.Encoding]::UTF8.GetBytes("pushed live`n"); $f.Write($b, 0, $b.Length); $f.Flush()
+    $live = (Receive-Job $job -Wait -AutoRemoveJob) -join "`n"
+    Check ($live -match 'pushed live') "stream: a line appended later is pushed to a connected client"
+    $f.Dispose()
+} finally {
+    if (-not $srv.HasExited) { Stop-Process -Id $srv.Id -ErrorAction SilentlyContinue }
+    Remove-Item $prof -Recurse -ErrorAction SilentlyContinue
+}
+
 if ($fails) { Write-Host "FSPERF SELFTEST: $fails failure(s)"; exit 1 }
 Write-Host "FSPERF SELFTEST OK"
 exit 0

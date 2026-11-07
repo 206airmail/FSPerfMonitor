@@ -11,14 +11,13 @@ public sealed unsafe class MainThreadSampler : IDisposable
 {
     private readonly object _lock = new();
     private readonly Dictionary<string, (ModuleKind kind, long count)> _window = new();
-    private long _windowTotal, _failed;
+    private long _windowTotal;
     // one worker per Start: it owns its thread handle (closed by the worker itself on exit) and its stop flag, so a Stop()
     // whose Join times out never closes a handle the worker may still be about to ResumeThread with
     private sealed class Worker { public volatile bool Stop; public IntPtr Handle; public Thread? Thread; }
     private Worker? _worker;
     private readonly ModuleMap _modules;
     public int Hz { get; }
-    public long TotalSamples { get; private set; }
 
     public MainThreadSampler(ModuleMap modules, int hz)
     {
@@ -72,8 +71,6 @@ public sealed unsafe class MainThreadSampler : IDisposable
                 lock (_lock) {
                     _window[key] = _window.TryGetValue(key, out var e) ? (e.kind, e.count + 1) : (kind, 1);
                     _windowTotal++;
-                    if (!ok) _failed++;
-                    TotalSamples++;
                 }
             }
         } finally {
@@ -95,7 +92,6 @@ public sealed unsafe class MainThreadSampler : IDisposable
             long n = _windowTotal;
             _window.Clear();
             _windowTotal = 0;
-            _failed = 0;
             return (list, n);
         }
     }

@@ -17,7 +17,6 @@ public sealed record Snapshot(
 
 public sealed class Collector : IDisposable
 {
-    public static readonly string[] GameNames = { "FarmingSimulator2025Game", "dedicatedServer" };
     private readonly Options _o;
     private readonly ModuleMap _modules = new();
     private readonly MainThreadSampler _sampler;

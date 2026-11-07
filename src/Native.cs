@@ -37,9 +37,6 @@ internal static unsafe class Native
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool GetThreadContext(IntPtr h, void* context);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    public static extern bool GetThreadTimes(IntPtr h, out long creation, out long exit, out long kernel, out long user);
-
     [DllImport("psapi.dll", SetLastError = true)]
     public static extern bool EnumProcessModulesEx(IntPtr process, IntPtr[] modules, int cb, out int needed, uint filter);
 

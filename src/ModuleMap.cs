@@ -10,8 +10,6 @@ public sealed unsafe class ModuleMap
 {
     private ModuleRange[] _ranges = Array.Empty<ModuleRange>();
 
-    public IReadOnlyList<ModuleRange> Ranges => _ranges;
-
     public static ModuleKind Classify(string path, string exeName, out string display)
     {
         string file = Path.GetFileName(path);

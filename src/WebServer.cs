@@ -13,7 +13,7 @@ public sealed class WebServer : IDisposable
 {
     private readonly TcpListener _listener;
     private readonly List<StreamWriter> _clients = new();
-    private readonly List<StreamWriter> _logClients = new();   // under _tail.Gate
+    private readonly List<LogClient> _logClients = new();   // under _tail.Gate
     private readonly LogTail? _tail;
     private readonly byte[] _logPage;
     private const int MaxLogClients = 8;
@@ -30,6 +30,8 @@ public sealed class WebServer : IDisposable
     public WebServer(int port, bool lan = false, LogTail? tail = null)
     {
         _tail = tail;
+        _port = port; _lanMode = lan;
+        _hosts = BuildHosts(); _hostsAt = DateTime.UtcNow;
         if (tail != null) { tail.Appended += OnLogAppended; tail.Heartbeat += OnLogHeartbeat; }
         _listener = new TcpListener(lan ? IPAddress.Any : IPAddress.Loopback, port);
         using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("index.html")!;
@@ -68,13 +70,16 @@ public sealed class WebServer : IDisposable
             string? line = ReadLineBounded(stream, 2048, deadline);
             if (line == null) { c.Close(); return; }
             int headers = 0;
-            string lastEventId = "";
+            string lastEventId = "", hostHeader = "";
             while (true) {
                 string? h = ReadLineBounded(stream, 8192, deadline);
                 if (h == null || ++headers > 100) { c.Close(); return; }
                 if (h.Length == 0) break;  // end of the headers
                 if (h.StartsWith("Last-Event-ID:", StringComparison.OrdinalIgnoreCase)) lastEventId = h[14..].Trim();
+                else if (h.StartsWith("Host:", StringComparison.OrdinalIgnoreCase)) hostHeader = h[5..].Trim();
             }
+            if (hostHeader.Length == 0) { Send(stream, 400, "text/plain", Encoding.ASCII.GetBytes("Host header required")); c.Close(); return; }
+            if (!HostAllowed(hostHeader)) { Send(stream, 403, "text/plain", Encoding.ASCII.GetBytes("forbidden host")); c.Close(); return; }   // DNS rebinding guard
             string path = line.Split(' ').ElementAtOrDefault(1) ?? "/";
             string route = path.Split('?')[0];
             if (!line.StartsWith("GET ")) { Send(stream, 405, "text/plain", Encoding.ASCII.GetBytes("GET only")); c.Close(); return; }
@@ -117,15 +122,72 @@ public sealed class WebServer : IDisposable
     }
 
     // ---- the log stream -------------------------------------------------------------------------------------------
-    // GET /log/stream?n=500[&after=<epoch>.<seq>]  (or the Last-Event-ID header a reconnecting EventSource sends).
+    // GET /log/stream?n=500[&after=<epoch>.<seq>]  (the Last-Event-ID header a reconnecting EventSource sends wins over ?after=).
     // Each event: `id: <epoch>.<last seq in it>` and data {"e":epoch,"reset":bool,"gap":bool,"lines":[[seq,text,marker],...]}.
     // reset = the client should drop what it shows (a fresh view); gap = lines between its last id and the first line here were
     // already pushed out of the ring.
+    // Network I/O never happens under tail.Gate: every viewer has a small bounded queue and its own writer thread. A viewer
+    // whose queue overflows, or whose write exceeds the per-event deadline, is closed (its browser reconnects with Last-Event-ID).
+    private sealed class LogClient
+    {
+        public const int MaxQueued = 64, EventDeadlineMs = 5000, ChunkBytes = 16 * 1024;
+        private readonly TcpClient _tcp;
+        private readonly NetworkStream _stream;
+        private readonly Queue<object> _q = new();   // string (ready text) or HistoryItem
+        private bool _closed;
+        public LogClient(TcpClient tcp, NetworkStream stream) { _tcp = tcp; _stream = stream; }
+        public bool Closed { get { lock (_q) return _closed; } }
+
+        // never blocks: false = the client was dropped (queue full)
+        public bool Enqueue(object item)
+        {
+            lock (_q) {
+                if (_closed) return false;
+                if (_q.Count >= MaxQueued) { CloseLocked(); return false; }
+                _q.Enqueue(item);
+                Monitor.Pulse(_q);
+                return true;
+            }
+        }
+
+        public void Close() { lock (_q) CloseLocked(); }
+        private void CloseLocked()
+        {
+            if (_closed) return;
+            _closed = true;
+            Monitor.PulseAll(_q);
+            try { _tcp.Close(); } catch { }   // unblocks a write in progress
+        }
+
+        public object? Next()
+        {
+            lock (_q) {
+                while (_q.Count == 0 && !_closed) Monitor.Wait(_q);
+                return _closed ? null : _q.Dequeue();
+            }
+        }
+
+        public bool Write(string text)
+        {
+            var bytes = new UTF8Encoding(false).GetBytes(text);
+            var until = DateTime.UtcNow.AddMilliseconds(EventDeadlineMs);
+            try {
+                for (int off = 0; off < bytes.Length; off += ChunkBytes) {
+                    if (DateTime.UtcNow > until) return false;
+                    _stream.Write(bytes, off, Math.Min(ChunkBytes, bytes.Length - off));
+                }
+                return true;
+            } catch { return false; }
+        }
+    }
+
+    private sealed record HistoryItem(List<LogLine> Lines, bool Reset, bool Gap, long LastSeq);
+
     private void ServeLogStream(TcpClient c, NetworkStream stream, string path, string lastEventId)
     {
         var tail = _tail!;
         int n = 500;
-        string after = lastEventId;
+        string after = "";
         int q = path.IndexOf('?');
         if (q >= 0) {
             foreach (var kv in path[(q + 1)..].Split('&')) {
@@ -136,28 +198,50 @@ public sealed class WebServer : IDisposable
                 else if (k == "after" && v.Length > 0) after = v;
             }
         }
+        if (lastEventId.Length > 0) after = lastEventId;   // the browser's own reconnect id is always newer than a URL's
         long afterSeq = -1;
         bool resumed = false;
         int dot = after.IndexOf('.');
         if (dot > 0 && after[..dot] == tail.Epoch && long.TryParse(after[(dot + 1)..], out long a) && a >= 0) { afterSeq = a; resumed = true; }
+        LogClient? client = null;
         try {
-            stream.WriteTimeout = 2000;   // a stalled phone must not stall the tailer
-            var w = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
-            lock (tail.Gate) {            // snapshot + register under one lock: no gap, no duplicate between history and live
-                if (_logClients.Count >= MaxLogClients) {
-                    Send(stream, 503, "text/plain", Encoding.ASCII.GetBytes("too many log views"));
-                    c.Close();
-                    return;
+            stream.WriteTimeout = 2000;
+            var cl = new LogClient(c, stream);
+            bool full = false;
+            lock (tail.Gate) {            // snapshot + register under one lock (no I/O in here): no gap, no duplicate
+                if (_logClients.Count >= MaxLogClients) full = true;
+                else {
+                    if (resumed && afterSeq > tail.LastSeq) { afterSeq = -1; resumed = false; }
+                    var lines = tail.Snapshot(afterSeq, n, out bool gap);
+                    cl.Enqueue("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nX-Accel-Buffering: no\r\nConnection: keep-alive\r\n\r\nretry: 2000\n\n");
+                    if (lines.Count > 0 || !resumed) cl.Enqueue(new HistoryItem(lines, !resumed, gap, lines.Count > 0 ? lines[^1].Seq : tail.LastSeq));
+                    _logClients.Add(cl);
+                    client = cl;
                 }
-                if (resumed && afterSeq > tail.LastSeq) { afterSeq = -1; resumed = false; }
-                var lines = tail.Snapshot(afterSeq, n, out bool gap);
-                w.Write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nX-Accel-Buffering: no\r\nConnection: keep-alive\r\n\r\nretry: 2000\n\n");
-                if (lines.Count > 0 || !resumed) w.Write(LogEvent(tail, lines, !resumed, gap, lines.Count > 0 ? lines[^1].Seq : tail.LastSeq));
-                _logClients.Add(w);
             }
+            if (full) {
+                Send(stream, 503, "text/plain", Encoding.ASCII.GetBytes("too many log views"));
+                c.Close();
+                return;
+            }
+            new Thread(() => LogWriter(client!)) { IsBackground = true, Name = "fsperf-logclient" }.Start();
         } catch {
             try { c.Close(); } catch { }
         }
+    }
+
+    private void LogWriter(LogClient cl)
+    {
+        try {
+            while (true) {
+                object? item = cl.Next();
+                if (item == null) break;
+                string text = item is HistoryItem h ? LogEvent(_tail!, h.Lines, h.Reset, h.Gap, h.LastSeq) : (string)item;
+                if (!cl.Write(text)) break;
+            }
+        } catch { }
+        cl.Close();
+        lock (_tail!.Gate) _logClients.Remove(cl);
     }
 
     private static string LogEvent(LogTail tail, IReadOnlyList<LogLine> lines, bool reset, bool gap, long lastSeq)
@@ -175,23 +259,52 @@ public sealed class WebServer : IDisposable
 
     private static readonly System.Text.Json.JsonSerializerOptions LogJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
-    // both run under tail.Gate
+    // both run under tail.Gate on the tailer's thread: they only queue, never touch a socket
     private void OnLogAppended(IReadOnlyList<LogLine> lines)
     {
         if (_logClients.Count == 0) return;
-        WriteLogClients(LogEvent(_tail!, lines, false, false, lines[^1].Seq));
+        FanOut(LogEvent(_tail!, lines, false, false, lines[^1].Seq));
     }
 
-    private void OnLogHeartbeat() { if (_logClients.Count > 0) WriteLogClients(": keep-alive\n\n"); }
+    private void OnLogHeartbeat() { if (_logClients.Count > 0) FanOut(": keep-alive\n\n"); }
 
-    private void WriteLogClients(string text)
+    private void FanOut(string text)
     {
         for (int i = _logClients.Count - 1; i >= 0; i--) {
-            try { _logClients[i].Write(text); }
-            catch {
-                try { _logClients[i].Dispose(); } catch { }
-                _logClients.RemoveAt(i);
-            }
+            if (!_logClients[i].Enqueue(text)) _logClients.RemoveAt(i);   // full queue = dropped
+        }
+    }
+
+    // ---- Host header check (DNS rebinding): every route -------------------------------------------------------------
+    private readonly int _port;
+    private readonly bool _lanMode;
+    private HashSet<string> _hosts = new(StringComparer.OrdinalIgnoreCase);
+    private DateTime _hostsAt = DateTime.MinValue;
+
+    private HashSet<string> BuildHosts()
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { $"127.0.0.1:{_port}", $"localhost:{_port}", $"[::1]:{_port}" };
+        if (_lanMode) {
+            try {
+                set.Add($"{Dns.GetHostName()}:{_port}");
+                foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                    foreach (var ua in ni.GetIPProperties().UnicastAddresses) {
+                        var ip = ua.Address;
+                        if (ip.AddressFamily == AddressFamily.InterNetwork) set.Add($"{ip}:{_port}");
+                        else if (ip.AddressFamily == AddressFamily.InterNetworkV6) set.Add($"[{new IPAddress(ip.GetAddressBytes())}]:{_port}");
+                    }
+            } catch { }
+        }
+        return set;
+    }
+
+    public bool HostAllowed(string host)
+    {
+        lock (_lock) {
+            if (_hosts.Contains(host)) return true;
+            if (!_lanMode || (DateTime.UtcNow - _hostsAt).TotalSeconds < 30) return false;   // addresses change: refresh, at most every 30 s
+            _hosts = BuildHosts(); _hostsAt = DateTime.UtcNow;
+            return _hosts.Contains(host);
         }
     }
 
@@ -214,7 +327,7 @@ public sealed class WebServer : IDisposable
 
     private static void Send(NetworkStream s, int code, string type, byte[] body)
     {
-        string reason = code == 200 ? "OK" : code == 404 ? "Not Found" : code == 503 ? "Service Unavailable" : "Method Not Allowed";
+        string reason = code == 200 ? "OK" : code == 404 ? "Not Found" : code == 503 ? "Service Unavailable" : code == 403 ? "Forbidden" : code == 400 ? "Bad Request" : "Method Not Allowed";
         var head = Encoding.ASCII.GetBytes($"HTTP/1.1 {code} {reason}\r\nContent-Type: {type}\r\nContent-Length: {body.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n");
         s.Write(head);
         s.Write(body);

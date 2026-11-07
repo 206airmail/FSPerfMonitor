@@ -102,7 +102,51 @@ try {
     $b = [Text.Encoding]::UTF8.GetBytes("pushed live`n"); $f.Write($b, 0, $b.Length); $f.Flush()
     $live = (Receive-Job $job -Wait -AutoRemoveJob) -join "`n"
     Check ($live -match 'pushed live') "stream: a line appended later is pushed to a connected client"
+    # a client that never reads must not delay another client or the tailer (all socket I/O is off the tailer's lock)
+    $stall = New-Object Net.Sockets.TcpClient
+    $stall.ReceiveBufferSize = 1024
+    $stall.Connect('127.0.0.1', 8799)
+    $sreq = [Text.Encoding]::ASCII.GetBytes("GET /log/stream?n=5000 HTTP/1.1`r`nHost: 127.0.0.1:8799`r`n`r`n")
+    $stall.GetStream().Write($sreq, 0, $sreq.Length)          # ... and never reads
+    $outB = Join-Path $env:TEMP 'fsperf_selftest_b.txt'
+    Remove-Item $outB -ErrorAction SilentlyContinue
+    $jobB = Start-Job { param($id, $o) curl.exe -sN --max-time 8 -H "Last-Event-ID: $id" -o $o 'http://127.0.0.1:8799/log/stream' } -ArgumentList $lastId, $outB
+    Start-Sleep -Milliseconds 800
+    $chunk = [Text.Encoding]::UTF8.GetBytes((("z" * 3000) + "`n") * 500)       # 1.5 MB per write, 8 MB in all
+    for ($i = 0; $i -lt 5; $i++) { $f.Write($chunk, 0, $chunk.Length) }
+    $f.Flush()
+    $mk = [Text.Encoding]::UTF8.GetBytes("MARKER_AFTER_STALL`n"); $f.Write($mk, 0, $mk.Length); $f.Flush()
+    $sw = [Diagnostics.Stopwatch]::StartNew(); $got = $false
+    while ($sw.ElapsedMilliseconds -lt 5000 -and -not $got) {
+        Start-Sleep -Milliseconds 100
+        try { $got = [bool](Select-String -Path $outB -SimpleMatch 'MARKER_AFTER_STALL' -Quiet) } catch { }
+    }
+    Check $got "stalled client: another client still gets live lines ($($sw.ElapsedMilliseconds) ms after 8 MB of log growth)"
+    Receive-Job $jobB -Wait -AutoRemoveJob | Out-Null
+    $n3 = (curl.exe -siN --max-time 2 'http://127.0.0.1:8799/log/stream?n=1') -join "`n"
+    Check ($n3 -match '200 OK') "stalled client: new viewers are still accepted"
+    $stall.Dispose()
+    Remove-Item $outB -ErrorAction SilentlyContinue
     $f.Dispose()
+    # Host header (DNS rebinding): every route checks it
+    foreach ($r in '/', '/api/snapshot', '/log', '/log/stream', '/events') {
+        $code = curl.exe -s -o NUL -w '%{http_code}' --max-time 3 -H 'Host: evil.example:8799' "http://127.0.0.1:8799$r"
+        Check ($code -eq '403') "Host: evil.example:8799 on $r -> $code (want 403)"
+    }
+    Check ((curl.exe -s -o NUL -w '%{http_code}' --max-time 3 -H 'Host: 127.0.0.1:9999' http://127.0.0.1:8799/) -eq '403') "Host with the wrong port -> 403"
+    Check ((curl.exe -s -o NUL -w '%{http_code}' --max-time 3 -H 'Host:' http://127.0.0.1:8799/) -eq '400') "no Host header -> 400"
+    foreach ($h in 'localhost:8799', '127.0.0.1:8799', '[::1]:8799') {
+        Check ((curl.exe -s -o NUL -w '%{http_code}' --max-time 3 -H "Host: $h" http://127.0.0.1:8799/api/snapshot) -eq '200') "Host: $h is accepted"
+    }
+    # ?after= must not override the Last-Event-ID header
+    $id2 = ([regex]::Matches($n3, '(?m)^id: (\S+)') | Select-Object -Last 1).Groups[1].Value
+    $ep = $id2.Split('.')[0]
+    [IO.File]::AppendAllText($logf, "header wins line`n")
+    Start-Sleep -Milliseconds 900
+    $hw = (curl.exe -sN --max-time 2 -H "Last-Event-ID: $id2" "http://127.0.0.1:8799/log/stream?n=1&after=$ep.0") -join "`n"
+    Check ($hw -match 'header wins line' -and $hw -notmatch 'first line' -and $hw -notmatch 'zzzzzzzzzz' -and $hw -match '"reset":false') "Last-Event-ID header wins over ?after= (no lines 1..N again)"
+    $qo = (curl.exe -sN --max-time 2 "http://127.0.0.1:8799/log/stream?n=1&after=$id2") -join "`n"
+    Check ($qo -match 'header wins line' -and $qo -match '"reset":false') "?after= alone still resumes"
 } finally {
     if (-not $srv.HasExited) { Stop-Process -Id $srv.Id -ErrorAction SilentlyContinue }
     Remove-Item $prof -Recurse -ErrorAction SilentlyContinue

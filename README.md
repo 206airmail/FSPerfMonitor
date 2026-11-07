@@ -43,7 +43,11 @@ only). The page keeps the last 10,000 lines and shows at most 3,000 at a time.
 - **Endpoint:** `GET /log/stream?n=500` is server-sent events in batches: `id: <epoch>.<seq>`, data
   `{"e","reset","gap","lines":[[seq,text,marker],...]}`. A reconnecting browser sends `Last-Event-ID` (or `&after=<id>`)
   and gets exactly the missed lines, none twice; if the ring no longer holds them the page shows a "lines were missed"
-  marker. At most 8 log viewers at a time.
+  marker (the header wins over `after`; the page also drops lines it already has, by sequence). At most 8 log viewers at
+  a time. Each viewer has its own small queue and writer thread: a phone that stops reading is dropped (and reconnects)
+  and never slows the tailer or the other viewers.
+- **Host header:** every route accepts only `127.0.0.1`, `localhost`, `[::1]` (and with `--lan` this PC's own addresses
+  and hostname) at the dashboard's port; any other Host gets 403, none gets 400 (guards against DNS rebinding).
 - **Privacy:** the view shows the whole `log.txt` (file paths, mod names, user names in paths) to everyone who can reach
   the dashboard. With `--lan` that is everyone on your private network. It is read-only.
 

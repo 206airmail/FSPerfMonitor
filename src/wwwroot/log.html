@@ -69,6 +69,7 @@ const KEEP = 10000, DOMCAP = 3000, PARAM_N = 500;
 const logEl = $("log");
 let model = [];            // {seq, text, cls}; the last KEEP lines received
 let held = [];             // lines that arrived while paused
+let epoch = "", lastSeq = 0;
 let paused = false, stick = true, lastId = "", connected = false, totalSeen = 0, shownCount = 0, haveGap = false;
 const on = { err: false, warn: false, fail: false };
 let needle = "";
@@ -126,7 +127,8 @@ function addLines(arr) {            // arr: [{seq,text,cls}], not paused
   if (!arr.length) return;
   for (const m of arr) model.push(m);
   if (model.length > KEEP) model.splice(0, model.length - KEEP);
-  const add = arr.filter(matches);
+  let add = arr.filter(matches);
+  if (add.length > DOMCAP) add = add.slice(add.length - DOMCAP);   // never build more nodes than the DOM cap (e.g. after a long pause)
   const empty = $("empty");
   if (empty && add.length) empty.remove();
   if (add.length) {
@@ -147,11 +149,17 @@ function addLines(arr) {            // arr: [{seq,text,cls}], not paused
 }
 
 function onBatch(b) {
+  if (b.reset || b.e !== epoch) { epoch = b.e; lastSeq = 0; }
   if (b.reset) { model = []; held = []; haveGap = false; stick = true; }
   const arr = [];
   if (b.gap) arr.push({ seq: 0, text: "=== some lines were missed while this page was disconnected ===", cls: "mk" });
-  for (const l of b.lines) arr.push({ seq: l[0], text: l[1], cls: classify(l[1], l[2] === 1) });
-  totalSeen += b.lines.length;
+  for (const l of b.lines) {
+    if (l[0] <= lastSeq) continue;                 // already shown (reconnect overlap): dedupe by sequence within the epoch
+    lastSeq = l[0];
+    arr.push({ seq: l[0], text: l[1], cls: classify(l[1], l[2] === 1) });
+  }
+  totalSeen += arr.length;
+  if (!arr.length && !b.reset) return;
   if (b.reset) { rebuildWith(arr); return; }
   if (paused) { held.push(...arr); if (held.length > KEEP) held.splice(0, held.length - KEEP); setStatus(); }
   else addLines(arr);

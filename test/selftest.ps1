@@ -47,6 +47,14 @@ foreach ($c in @(@('16.7', '16.0', '9.0', 'CPU-bound'), @('16.7', '8.0', '16.2',
     $v = & $exe --judge $c[0] $c[1] $c[2]
     Check ($v -eq $c[3]) "full-mode verdict: frame $($c[0]) ms, CPU $($c[1]), GPU $($c[2]) -> $v"
 }
+# stale ETW session decision (issue #9): FSPerf_<pid> sessions whose pid is not a live fsperf are stopped; others never
+$logman = "Name:                 Circular Kernel Context Logger`nName:                 FSPerf_111`nName:                 FSPerf_222   `nName:                 PresentMon_333`nName:                 XFSPerf_444`nName:                 FSPerf_notapid`n"
+$stale = @($logman | & $exe --stale-sessions 222)
+$logman2 = "FSPerf_111                  Trace   Running`nFSPerf_222                  Trace   Running`nPresentMon_333  Trace Running`n"
+$stale2 = @($logman2 | & $exe --stale-sessions 222)
+Check (($stale2 -join ',') -eq 'FSPerf_111') "stale sessions: dead fsperf's session stopped, live one and foreign ones kept ($($stale2 -join ','))"
+Check ($stale.Count -eq 0) "stale sessions: only lines that start with FSPerf_<digits> count ($($stale -join ','))"
+# the unprivileged cleanup on this machine must not crash fsperf (errors are logged, not fatal)
 # without admin / Performance Log Users, full mode reports why and basic mode goes on
 $j = & $exe --once --pid $PID | ConvertFrom-Json
 if (-not $j.elevated) { Check ($j.mode -eq 'basic' -and ($j.frames.state -in @('denied', 'off'))) "not elevated: full mode '$($j.frames.state)', basic mode used" }

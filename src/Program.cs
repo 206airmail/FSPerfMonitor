@@ -54,7 +54,7 @@ public sealed class Options
 
 public static class Program
 {
-    public const string Version = "0.2.3";
+    public const string Version = "0.2.4";
     public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, NumberHandling =
         System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
 
@@ -65,6 +65,11 @@ public static class Program
             double P(string x) => double.Parse(x, CultureInfo.InvariantCulture);
             var f = new FrameStats("running", "", 100, 1000 / P(args[1]), P(args[1]), P(args[1]), P(args[1]), 0, P(args[2]), 0, P(args[3]), 0, 0, 0, "", "");
             Console.WriteLine(FrameMonitor.Judge(f)?.Label ?? "none");
+            return 0;
+        }
+        if (args.Length >= 2 && args[0] == "--stale-sessions") {  // self-test helper: stdin = `logman query -ets` text; args = live fsperf pids
+            var live = args.Skip(1).Select(a => int.Parse(a, CultureInfo.InvariantCulture)).ToHashSet();
+            foreach (var n in EtwSessions.Stale(EtwSessions.Parse(Console.In.ReadToEnd()), -1, live.Contains)) Console.WriteLine(n);
             return 0;
         }
         Options o;

@@ -9,7 +9,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>fsperf</AssemblyName>
     <RootNamespace>FSPerf</RootNamespace>
-    <Version>0.2.3</Version>
+    <Version>0.2.4</Version>
     <Product>FSPerf</Product>
     <Copyright>Copyright (c) 2026 Jared Brown. MIT licence.</Copyright>
     <InvariantGlobalization>true</InvariantGlobalization>

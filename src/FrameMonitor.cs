@@ -37,8 +37,20 @@ public sealed class FrameMonitor : IDisposable
         if (_exe == null) {
             _state = "off";
             _hint = "PresentMon not found: put PresentMon-<version>-x64.exe next to fsperf.exe or in tools\\ (build.ps1 -FetchPresentMon), or pass --presentmon <path>";
+            return;
         }
+        // a killed fsperf never stops its ETW session, and an orphan starves PresentMon of events (issue #9)
+        EtwSessions.CleanupStale();
+        // every normal exit path (Ctrl+C, console close, unhandled exception) stops our session; a kill cannot, the next start cleans up
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => EtwSessions.Stop(Session);
+        AppDomain.CurrentDomain.UnhandledException += (_, _) => EtwSessions.Stop(Session);
     }
+
+    // header watchdog: PresentMon is running but has printed no CSV header (no events reach it, e.g. a starved or half-dead
+    // ETW session) for this long -> restart the capture once per game process, and say why
+    private const double WatchdogSeconds = 20;
+    private DateTime _captureStart = DateTime.MinValue;
+    private int _watchdogPid;      // the game pid the one allowed restart was spent on
 
     public static bool IsElevated()
     {
@@ -77,10 +89,27 @@ public sealed class FrameMonitor : IDisposable
     public void Ensure(int pid)
     {
         if (_exe == null) return;
-        if (_pm != null && !_pm.HasExited && _pid == pid) return;
+        bool restart = false;
+        if (_pm != null && !_pm.HasExited && _pid == pid) {
+            string st; string lastErr = "";
+            lock (_lock) { st = _state; if (_stderr.Count > 0) lastErr = _stderr[^1]; }
+            double waited = (DateTime.UtcNow - _captureStart).TotalSeconds;
+            if (st != "starting" || waited < WatchdogSeconds) return;
+            if (_watchdogPid == pid) {   // the one restart did not help: keep waiting, but tell the user what PresentMon says
+                lock (_lock) if (_state == "starting")
+                    _hint = $"no frames from PresentMon after {waited:0} s and a restart{(lastErr.Length > 0 ? " (PresentMon: " + lastErr + ")" : "")}; if an old FSPerf_* ETW session is stuck run: logman stop FSPerf_<pid> -ets (admin)";
+                return;
+            }
+            _watchdogPid = pid;
+            restart = true;
+            EtwSessions.Log($"no PresentMon frames {waited:0} s after start{(lastErr.Length > 0 ? " (" + lastErr + ")" : "")}; restarting the capture and its ETW session once");
+        }
         if (_state == "denied" && _pid == pid) return;               // no point retrying until FSPerf restarts elevated
-        if ((DateTime.UtcNow - _lastStart).TotalSeconds < 10) return; // a crashing capture: back off
+        if (!restart && (DateTime.UtcNow - _lastStart).TotalSeconds < 10) return; // a crashing capture: back off
+        if (_pid != pid) _watchdogPid = 0;  // a new game process gets its own one restart
         StopCapture();
+        if (restart) EtwSessions.Stop(Session);  // a wedged session is what we are working around: start from a clean one
+        _captureStart = DateTime.UtcNow;
         _pid = pid;
         _lastStart = DateTime.UtcNow;
         lock (_lock) { _frames.Clear(); _stderr.Clear(); }
@@ -229,13 +258,8 @@ public sealed class FrameMonitor : IDisposable
     public void Dispose()
     {
         StopCapture();
-        if (_exe != null && _state == "running") {
-            // make sure the ETW session does not outlive us
-            try {
-                using var t = Process.Start(new ProcessStartInfo(_exe, $"--session_name {Session} --terminate_existing_session") { UseShellExecute = false, CreateNoWindow = true,
-                    RedirectStandardOutput = true, RedirectStandardError = true });
-                t?.WaitForExit(3000);
-            } catch { }
-        }
+        if (_exe == null) return;
+        // the ETW session must not outlive us, whatever state the capture was in (a 'starting' one holds a session too)
+        EtwSessions.Stop(Session);
     }
 }

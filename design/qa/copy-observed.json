@@ -1,0 +1,2775 @@
+[
+  {
+    "text": "Skip to content",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "SVS Performance Monitor",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "SimVizion Studios",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Dashboard",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Settings",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Game log",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Watching the game",
+    "pages": [
+      "dashboard",
+      "tray"
+    ]
+  },
+  {
+    "text": "Full mode · frame times",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Farming Simulator 25",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Your graphics card is the limit",
+    "pages": [
+      "dashboard",
+      "tray"
+    ]
+  },
+  {
+    "text": "The game is waiting for graphics work to finish. Try lowering graphics settings, then compare the same place in the game.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "FPS",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "58.2",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Frames each second",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "1% low",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "40.3",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "A guide to the slowest frames",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Frame time",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "17.2",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Average · lower is smoother",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Frame times",
+    "pages": [
+      "dashboard",
+      "settings"
+    ]
+  },
+  {
+    "text": "Last 5 minutes · milliseconds",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "0",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "20",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "40",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "−5 min",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Now",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Processor work – dashed",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Graphics work · dotted",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Current average 17.2 ms · slowest 1% boundary 24.8 ms. Sample trend includes an occasional spike.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "What does this mean?",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "FPS counts frames each second. Higher usually feels smoother. Frame time is how long each frame takes; lower is better. The 1% low helps you spot uneven performance even when the average FPS looks good.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "The verdict is a guide for this moment. A frame rate cap, a menu or loading can change it. Compare the same place in the game when testing a change.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced",
+    "pages": [
+      "dashboard",
+      "settings"
+    ]
+  },
+  {
+    "text": "Loads, memory, threads and plugins",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Loads and memory",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "FarmingSimulator2025Game · PID 18420",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Main thread busy",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "62.0 %",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Of one logical core",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "GPU 3D",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "98.0 %",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Busiest 3D engine",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Game CPU",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "18.4 %",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Across 24 logical cores",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "VRAM · game",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "7.5 GiB",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Dedicated graphics memory",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "RAM · game",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "11.7 GiB",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Working set",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Private memory",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "13.1 GiB",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Committed private bytes",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Load over time",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Last 5 minutes · percent",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "50",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "100",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Main thread busy – dashed",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "GPU 3D · dotted",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Per-frame detail",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "CPU busy / frame",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "8.1 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "CPU wait / frame",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "9.1 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "GPU busy / frame",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "16.5 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "GPU wait / frame",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "0.7 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "GPU latency",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "18.1 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Display latency",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "34.4 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Median frame time · p50",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "16.9 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Slowest 1% boundary · p99",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "24.8 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Frames this interval",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "58",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Presentation / runtime",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Composed: Flip / DXGI",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Capture: running. Standard Windows permissions.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Main thread: where the time goes",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Module / kind",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Share / samples",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "FarmingSimulator2025Game.exe",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Game",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "70.2%",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "174 samples",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "nvwgf2umx.dll",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Graphics",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "16.1%",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "40 samples",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "FS25_3dTerrain",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Plugin",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "6.5%",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "16 samples",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "FSPMesh",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "3.2%",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "8 samples",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "fsp.dll",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Host",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "2.0%",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "5 samples",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "ntdll.dll",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Windows",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "248 samples this interval. Shares reflect sampled wall time, including waits.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "A plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Busiest game threads",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Thread ID",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Busy · one core",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "19432 · main",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "62.0%",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "19484",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "37.0%",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "20112",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "24.0%",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "20136",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "12.0%",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "FSPluginHost plugins",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Open game log →",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Host 0.14.0 · channel on · build 1.25.1.0 Steam",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Status file written 2026-11-08T14:32:05-09:00.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Version 1.0.0.0",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "active",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "voxelApi=48",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "t3dBuild=1.25.1.0 Steam",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Version 0.3.0",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "shapesB=ok",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "hook=1",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "shapes=on",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "capturesMax=1024",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "captures=0",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "heldMB=0.0",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "madeRefused=0/0",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "RaiseTipLimit",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Version 1.0.1",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "profileDir=1",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Services: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Diagnostics",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Snapshot 2026-11-08T14:32:05-09:00 · Mode full · Attached true · Verdict GPU-bound: GPU busy 16.5 ms, CPU busy 8.1 ms, frame 17.2 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "SimVizion Studios · SVS Performance Monitor",
+    "pages": [
+      "dashboard",
+      "settings",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Watches the game from outside. Nothing is added to the game.",
+    "pages": [
+      "dashboard",
+      "settings",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Design preview · sample data",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Scenario",
+    "pages": [
+      "dashboard",
+      "log"
+    ]
+  },
+  {
+    "text": "Graphics card limit · full",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Processor limit · full",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Waiting for the game",
+    "pages": [
+      "dashboard",
+      "tray"
+    ]
+  },
+  {
+    "text": "Frame times not set up · basic",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Frame times off · basic",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Neither is the limit",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Both near the limit",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Mixed loads · basic",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Load unavailable · basic",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Starting frame capture",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "No frames yet",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Frame tool missing",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Capture error",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Capture stopped",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Connection lost",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "No plugins installed",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Sampling off",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Appearance",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Use device setting",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Dark",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Light (proposed)",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Tray preview",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Welcome preview",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "×",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Main navigation",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Frame times in milliseconds, synthetic five-minute sample",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Processor and graphics load in percent, synthetic five-minute sample",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Design preview controls",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "Dismiss message",
+    "pages": [
+      "dashboard",
+      "settings",
+      "log",
+      "welcome",
+      "tray"
+    ]
+  },
+  {
+    "text": "This PC",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "General",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Start SVS Performance Monitor when Windows starts",
+    "pages": [
+      "settings",
+      "welcome"
+    ]
+  },
+  {
+    "text": "Keep it ready when you want to play.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Show frame times (FPS and stutter)",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Windows will ask for permission once, then sign out and back in. After that, SVS Performance Monitor can show FPS without full permissions.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Not set up",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Set up",
+    "pages": [
+      "settings",
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Phone and home network",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Let my phone or other computers at home open the dashboard",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "They can also see your game log, which shows your Windows user name and mod list. Use a trusted private home network. Windows will ask once.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Home network sharing is off.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Run with full permissions",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Only needed for the detailed mod breakdown. Windows asks once.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Show what the game’s main loop spends time on",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Briefly pauses the game hundreds of times a second; it slows the game a little (a few percent). Leave off for timing-sensitive comparisons, or keep it the same for both runs.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Open the dashboard when SVS Performance Monitor starts",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Open it in your usual browser.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Farming Simulator settings folder",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Found automatically. Change only if you use a different folder.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Port",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Changing this address takes effect after SVS Performance Monitor restarts.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "⚠ Enter a whole number from 1 to 65535.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Preview only. Changes are not saved to your PC.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Save changes",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "View",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "This PC · not set up",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Phone · read-only",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Frame times ready",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Sign out needed",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Permission cancelled",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Setup failed",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Live",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Find text in the log",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Errors",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Warnings",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "FAIL",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Pause",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Clear",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Selected levels are combined. Text ignores letter case. Clear affects this view only.",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Game restarted · 2:30:00 PM",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:30:00 Farming Simulator 25 · Version 1.25.1.0",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:30:01 Settings: C:\\Users\\Player\\Documents\\My Games\\FarmingSimulator2025",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:30:03 Loading map: Riverbend Springs",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:30:04 [FSPluginHost] FSPMesh 0.3.0 active",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "WARN",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:30:06 Warning: Missing optional texture for FS25_DemoTrailer/decals/dirt_diffuse.dds",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:30:08 [FSPMesh] shapes=on captures=128 heldMB=42.6",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "PASS",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:30:09 [FSPAutoTest] PASS: vehicle loaded",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "ERROR",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:30:10 Error: Cannot open file mods/FS25_DemoTrailer/sounds/coupling.xml",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:30:11 [FSPAutoTest] FAIL: trailer coupling sound was not found",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:30:12 Game saved successfully.",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "11 lines · 11 shown",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Jump to live ↓",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Live · sample lines",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Paused",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Reading older lines",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Reconnecting",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Waiting for lines",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Game restarted",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Lines were missed",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Filter lines…",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Game log lines",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Welcome · SimVizion Studios",
+    "pages": [
+      "welcome"
+    ]
+  },
+  {
+    "text": "Know what holds your game back.",
+    "pages": [
+      "welcome"
+    ]
+  },
+  {
+    "text": "SVS Performance Monitor shows whether your processor or graphics card is limiting Farming Simulator 25. It watches from outside the game, so nothing is added to the game.",
+    "pages": [
+      "welcome"
+    ]
+  },
+  {
+    "text": "See FPS and spot stutter",
+    "pages": [
+      "welcome",
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Set up frame times to see how smoothly the game runs. Windows will ask for permission once, then sign out and back in.",
+    "pages": [
+      "welcome"
+    ]
+  },
+  {
+    "text": "Set up frame times",
+    "pages": [
+      "welcome"
+    ]
+  },
+  {
+    "text": "You can also do this later in Settings.",
+    "pages": [
+      "welcome"
+    ]
+  },
+  {
+    "text": "SVS Performance Monitor stays in the notification area while it runs.",
+    "pages": [
+      "welcome"
+    ]
+  },
+  {
+    "text": "Open dashboard →",
+    "pages": [
+      "welcome"
+    ]
+  },
+  {
+    "text": "Notification area",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Windows tray · design preview",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Tray menu",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Open dashboard",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Exit",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Open the dashboard with a double-click. Right-click for this menu.",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "The actual Windows menu uses native keyboard and dismissal behavior.",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Icon sources · 16 and 32 px",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "App icon",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Waiting",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Watching",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Waiting · light Windows tray",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Watching · light Windows tray",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Waiting uses a neutral outline. Watching uses a green outline with a check. Read the verdict in the tooltip; tiny limit badges would be hard to tell apart.",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Status",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "Your processor is the limit",
+    "pages": [
+      "tray",
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Tray menu preview",
+    "pages": [
+      "tray"
+    ]
+  },
+  {
+    "text": "The game needs more time to finish its calculations. Try reducing the number of active vehicles or objects, then compare the same place.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "46.7",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "31.4",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "21.4",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Current average 21.4 ms · slowest 1% boundary 31.8 ms. Sample trend includes an occasional spike.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "97.0 %",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "58.0 %",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "20.1 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "1.3 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "10.0 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "11.4 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "21.0 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "31.8 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "47",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "97.0%",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Snapshot 2026-11-08T14:32:05-09:00 · Mode full · Attached true · Verdict CPU-bound: CPU busy 20.1 ms, GPU busy 10.0 ms, frame 21.4 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n97.0 %\nOf one logical core\nGPU 3D\n58.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n20.1 ms\nCPU wait / frame\n1.3 ms\nGPU busy / frame\n10.0 ms\nGPU wait / frame\n11.4 ms\nGPU latency\n18.1 ms\nDisplay latency\n34.4 ms\nMedian frame time · p50\n21.0 ms\nSlowest 1% boundary · p99\n31.8 ms\nFrames this interval\n47\nPresentation / runtime\nComposed: Flip / DXGI\n\nCapture: running. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t97.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode full · Attached true · Verdict CPU-bound: CPU busy 20.1 ms, GPU busy 10.0 ms, frame 21.4 ms",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "Ready when you are",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Basic mode · loads only",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Start Farming Simulator 25. This page will pick it up automatically.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "—",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "ⓘ",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "No readings yet",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "FPS, frame times and loads will appear when the game is running.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "No game connected",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "The trend will begin when the game starts.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Capture: disabled. Full Windows permissions.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "No samples while waiting for the game.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "0 samples this interval. Shares reflect sampled wall time, including waits.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "No thread readings yet.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Saved status; this does not mean the game is running. Status file written 2026-11-08T06:24:29.5961973-09:00.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Snapshot 2026-11-08T10:51:44.6851037-09:00 · Mode basic · Attached false · Verdict waiting: the game is not running",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nNo game connected\nMain thread busy\n—\nOf one logical core\nGPU 3D\n—\nBusiest 3D engine\nGame CPU\n—\nAcross 24 logical cores\nVRAM · game\n—\nDedicated graphics memory\nRAM · game\n—\nWorking set\nPrivate memory\n—\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n\nThe trend will begin when the game starts.\n\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n—\nCPU wait / frame\n—\nGPU busy / frame\n—\nGPU wait / frame\n—\nGPU latency\n—\nDisplay latency\n—\nMedian frame time · p50\n—\nSlowest 1% boundary · p99\n—\nFrames this interval\n—\nPresentation / runtime\n—\n\nCapture: disabled. Full Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nNo samples while waiting for the game.\n\n0 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\nNo thread readings yet.\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nSaved status; this does not mean the game is running. Status file written 2026-11-08T06:24:29.5961973-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T10:51:44.6851037-09:00 · Mode basic · Attached false · Verdict waiting: the game is not running",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "The game is waiting for graphics work to finish. Try lowering graphics settings, then compare the same place in the game. This is an estimate from current loads.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Set up frame times on this PC. Windows will ask for permission once, then sign out and back in.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Capture: denied · Performance Log Users membership required. Standard Windows permissions.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Snapshot 2026-11-08T14:32:05-09:00 · Mode basic · Attached true · Verdict GPU-bound: GPU 3D 98%, main thread 62% busy",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n62.0 %\nOf one logical core\nGPU 3D\n98.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n—\nCPU wait / frame\n—\nGPU busy / frame\n—\nGPU wait / frame\n—\nGPU latency\n—\nDisplay latency\n—\nMedian frame time · p50\n—\nSlowest 1% boundary · p99\n—\nFrames this interval\n—\nPresentation / runtime\n—\n\nCapture: denied · Performance Log Users membership required. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode basic · Attached true · Verdict GPU-bound: GPU 3D 98%, main thread 62% busy",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "Frame times are off",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "You can still see processor and graphics loads. Turn on frame times to see FPS and stutter.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Capture: disabled. Standard Windows permissions.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n62.0 %\nOf one logical core\nGPU 3D\n98.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n—\nCPU wait / frame\n—\nGPU busy / frame\n—\nGPU wait / frame\n—\nGPU latency\n—\nDisplay latency\n—\nMedian frame time · p50\n—\nSlowest 1% boundary · p99\n—\nFrames this interval\n—\nPresentation / runtime\n—\n\nCapture: disabled. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode basic · Attached true · Verdict GPU-bound: GPU 3D 98%, main thread 62% busy",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "Neither is the limit right now",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "The game may be holding a steady frame rate, showing a menu or loading.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "60.0",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "58.0",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "16.7",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Current average 16.7 ms · slowest 1% boundary 17.2 ms. Sample trend includes an occasional spike.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "42.0 %",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "55.0 %",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "7.0 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "9.7 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "9.0 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "7.7 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "17.2 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "60",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Snapshot 2026-11-08T14:32:05-09:00 · Mode full · Attached true · Verdict neither: Both busy times are below 80% of the frame time",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n42.0 %\nOf one logical core\nGPU 3D\n55.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n7.0 ms\nCPU wait / frame\n9.7 ms\nGPU busy / frame\n9.0 ms\nGPU wait / frame\n7.7 ms\nGPU latency\n18.1 ms\nDisplay latency\n34.4 ms\nMedian frame time · p50\n16.9 ms\nSlowest 1% boundary · p99\n17.2 ms\nFrames this interval\n60\nPresentation / runtime\nComposed: Flip / DXGI\n\nCapture: running. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode full · Attached true · Verdict neither: Both busy times are below 80% of the frame time",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "Your processor and graphics card are both near the limit",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Both are working hard. Try one change at a time and compare the same place in the game.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "95.0 %",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "16.0 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "1.2 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Snapshot 2026-11-08T14:32:05-09:00 · Mode full · Attached true · Verdict both near the limit: CPU busy 16.0 ms and GPU busy 16.5 ms, frame 17.2 ms",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n95.0 %\nOf one logical core\nGPU 3D\n98.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n16.0 ms\nCPU wait / frame\n1.2 ms\nGPU busy / frame\n16.5 ms\nGPU wait / frame\n0.7 ms\nGPU latency\n18.1 ms\nDisplay latency\n34.4 ms\nMedian frame time · p50\n16.9 ms\nSlowest 1% boundary · p99\n24.8 ms\nFrames this interval\n58\nPresentation / runtime\nComposed: Flip / DXGI\n\nCapture: running. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode full · Attached true · Verdict both near the limit: CPU busy 16.0 ms and GPU busy 16.5 ms, frame 17.2 ms",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "The limit is changing",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "The readings are close. Keep playing in the same area to see a clearer pattern. This is an estimate from current loads.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "87.0 %",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "86.0 %",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Snapshot 2026-11-08T14:32:05-09:00 · Mode basic · Attached true · Verdict mixed: main thread 87%, GPU 3D 86%",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n87.0 %\nOf one logical core\nGPU 3D\n86.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n—\nCPU wait / frame\n—\nGPU busy / frame\n—\nGPU wait / frame\n—\nGPU latency\n—\nDisplay latency\n—\nMedian frame time · p50\n—\nSlowest 1% boundary · p99\n—\nFrames this interval\n—\nPresentation / runtime\n—\n\nCapture: disabled. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode basic · Attached true · Verdict mixed: main thread 87%, GPU 3D 86%",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "There is not enough information yet",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Graphics readings are unavailable. The other readings are still shown below. This is an estimate from current loads.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Snapshot 2026-11-08T14:32:05-09:00 · Mode basic · Attached true · Verdict unknown: no GPU counters on this machine",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n62.0 %\nOf one logical core\nGPU 3D\n—\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n—\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n—\nCPU wait / frame\n—\nGPU busy / frame\n—\nGPU wait / frame\n—\nGPU latency\n—\nDisplay latency\n—\nMedian frame time · p50\n—\nSlowest 1% boundary · p99\n—\nFrames this interval\n—\nPresentation / runtime\n—\n\nCapture: disabled. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode basic · Attached true · Verdict unknown: no GPU counters on this machine",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "Starting frame times",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Keep the game open. Load readings are available while frame times start.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Capture: starting · Starting capture. Standard Windows permissions.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n62.0 %\nOf one logical core\nGPU 3D\n98.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n—\nCPU wait / frame\n—\nGPU busy / frame\n—\nGPU wait / frame\n—\nGPU latency\n—\nDisplay latency\n—\nMedian frame time · p50\n—\nSlowest 1% boundary · p99\n—\nFrames this interval\n—\nPresentation / runtime\n—\n\nCapture: starting · Starting capture. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode basic · Attached true · Verdict GPU-bound: GPU 3D 98%, main thread 62% busy",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "Waiting for frame times",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "No frames have arrived yet. Bring the game to the foreground and keep playing.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Capture: running · No frames received. Standard Windows permissions.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n62.0 %\nOf one logical core\nGPU 3D\n98.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n—\nCPU wait / frame\n—\nGPU busy / frame\n—\nGPU wait / frame\n—\nGPU latency\n—\nDisplay latency\n—\nMedian frame time · p50\n—\nSlowest 1% boundary · p99\n—\nFrames this interval\n—\nPresentation / runtime\n—\n\nCapture: running · No frames received. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode basic · Attached true · Verdict GPU-bound: GPU 3D 98%, main thread 62% busy",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "Frame times need a missing file",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "The frame-times tool is missing. Check the files that came with SVS Performance Monitor.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Open Settings",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Capture: off · PresentMon not found. Standard Windows permissions.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n62.0 %\nOf one logical core\nGPU 3D\n98.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n—\nCPU wait / frame\n—\nGPU busy / frame\n—\nGPU wait / frame\n—\nGPU latency\n—\nDisplay latency\n—\nMedian frame time · p50\n—\nSlowest 1% boundary · p99\n—\nFrames this interval\n—\nPresentation / runtime\n—\n\nCapture: off · PresentMon not found. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode basic · Attached true · Verdict GPU-bound: GPU 3D 98%, main thread 62% busy",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "Frame times could not start",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Load readings are still available. Open Settings to check setup, then restart SVS Performance Monitor.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Capture: error · Unable to start capture. Standard Windows permissions.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n62.0 %\nOf one logical core\nGPU 3D\n98.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n—\nCPU wait / frame\n—\nGPU busy / frame\n—\nGPU wait / frame\n—\nGPU latency\n—\nDisplay latency\n—\nMedian frame time · p50\n—\nSlowest 1% boundary · p99\n—\nFrames this interval\n—\nPresentation / runtime\n—\n\nCapture: error · Unable to start capture. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode basic · Attached true · Verdict GPU-bound: GPU 3D 98%, main thread 62% busy",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "Frame times stopped",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Load readings are still available. Restart SVS Performance Monitor to try again.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Capture: exited · PresentMon stopped. Standard Windows permissions.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n62.0 %\nOf one logical core\nGPU 3D\n98.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n—\nCPU wait / frame\n—\nGPU busy / frame\n—\nGPU wait / frame\n—\nGPU latency\n—\nDisplay latency\n—\nMedian frame time · p50\n—\nSlowest 1% boundary · p99\n—\nFrames this interval\n—\nPresentation / runtime\n—\n\nCapture: exited · PresentMon stopped. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode basic · Attached true · Verdict GPU-bound: GPU 3D 98%, main thread 62% busy",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "Reconnecting…",
+    "pages": [
+      "dashboard",
+      "log"
+    ]
+  },
+  {
+    "text": "The last readings below are from 2:32:05 PM. Waiting to reconnect to the PC running SVS Performance Monitor.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "These readings are out of date",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Check that SVS Performance Monitor is running on your PC and that your home network is connected.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Live trend paused. Waiting to reconnect.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n62.0 %\nOf one logical core\nGPU 3D\n98.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n\nLive trend paused. Waiting to reconnect.\n\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n8.1 ms\nCPU wait / frame\n9.1 ms\nGPU busy / frame\n16.5 ms\nGPU wait / frame\n0.7 ms\nGPU latency\n18.1 ms\nDisplay latency\n34.4 ms\nMedian frame time · p50\n16.9 ms\nSlowest 1% boundary · p99\n24.8 ms\nFrames this interval\n58\nPresentation / runtime\nComposed: Flip / DXGI\n\nCapture: running. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode full · Attached true · Verdict GPU-bound: GPU busy 16.5 ms, CPU busy 8.1 ms, frame 17.2 ms",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "FSPluginHost was not found. SVS Performance Monitor works without it.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n62.0 %\nOf one logical core\nGPU 3D\n98.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n8.1 ms\nCPU wait / frame\n9.1 ms\nGPU busy / frame\n16.5 ms\nGPU wait / frame\n0.7 ms\nGPU latency\n18.1 ms\nDisplay latency\n34.4 ms\nMedian frame time · p50\n16.9 ms\nSlowest 1% boundary · p99\n24.8 ms\nFrames this interval\n58\nPresentation / runtime\nComposed: Flip / DXGI\n\nCapture: running. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nFarmingSimulator2025Game.exe\nGame\n\t70.2%\n174 samples\n\nnvwgf2umx.dll\nGraphics\n\t16.1%\n40 samples\n\nFS25_3dTerrain\nPlugin\n\t6.5%\n16 samples\n\nFSPMesh\nPlugin\n\t3.2%\n8 samples\n\nfsp.dll\nHost\n\t2.0%\n5 samples\n\nntdll.dll\nWindows\n\t2.0%\n5 samples\n\n248 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nFSPluginHost was not found. SVS Performance Monitor works without it.\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode full · Attached true · Verdict GPU-bound: GPU busy 16.5 ms, CPU busy 8.1 ms, frame 17.2 ms",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "No samples. Turn on the breakdown in Settings to collect them.",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Snapshot 2026-11-08T14:32:05-09:00 · Mode full · Attached true · Verdict GPU-bound: GPU busy 16.5 ms, CPU busy 8.1 ms, frame 17.2 ms · Sampling disabled",
+    "pages": [
+      "dashboard"
+    ]
+  },
+  {
+    "text": "Advanced Loads, memory, threads and plugins\nLoads and memory\nFarmingSimulator2025Game · PID 18420\nMain thread busy\n62.0 %\nOf one logical core\nGPU 3D\n98.0 %\nBusiest 3D engine\nGame CPU\n18.4 %\nAcross 24 logical cores\nVRAM · game\n7.5 GiB\nDedicated graphics memory\nRAM · game\n11.7 GiB\nWorking set\nPrivate memory\n13.1 GiB\nCommitted private bytes\nLoad over time\nLast 5 minutes · percent\n0\n50\n100\n−5 min\nNow\nMain thread busy – dashed\nGPU 3D · dotted\nPer-frame detail\nCPU busy / frame\n8.1 ms\nCPU wait / frame\n9.1 ms\nGPU busy / frame\n16.5 ms\nGPU wait / frame\n0.7 ms\nGPU latency\n18.1 ms\nDisplay latency\n34.4 ms\nMedian frame time · p50\n16.9 ms\nSlowest 1% boundary · p99\n24.8 ms\nFrames this interval\n58\nPresentation / runtime\nComposed: Flip / DXGI\n\nCapture: running. Standard Windows permissions.\n\nMain thread: where the time goes\nModule / kind\tShare / samples\nNo samples. Turn on the breakdown in Settings to collect them.\n\n0 samples this interval. Shares reflect sampled wall time, including waits.\n\nA plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.\n\nBusiest game threads\nThread ID\tBusy · one core\n19432 · main\t62.0%\n19484\t37.0%\n20112\t24.0%\n20136\t12.0%\nFSPluginHost plugins\nOpen game log →\n\nHost 0.14.0 · channel on · build 1.25.1.0 Steam\n\nStatus file written 2026-11-08T14:32:05-09:00.\n\nFS25_3dTerrain\nVersion 1.0.0.0\nactive\nvoxelApi=48\nt3dBuild=1.25.1.0 Steam\nFSPMesh\nVersion 0.3.0\nactive\nshapesB=ok\nhook=1\nshapes=on\ncapturesMax=1024\ncaptures=0\nheldMB=0.0\nmadeRefused=0/0\nRaiseTipLimit\nVersion 1.0.1\nactive\nprofileDir=1\n\nServices: FSPMesh.api 1.0 (FSPMesh) · FSPMesh.shapes 1.0 (FSPMesh)\n\nDiagnostics\n\nSnapshot 2026-11-08T14:32:05-09:00 · Mode full · Attached true · Verdict GPU-bound: GPU busy 16.5 ms, CPU busy 8.1 ms, frame 17.2 ms · Sampling disabled",
+    "pages": [
+      "dashboard · Advanced"
+    ]
+  },
+  {
+    "text": "Settings can be changed on the PC running SVS Performance Monitor",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "These values are read-only. You can select and copy the folder and port.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "On",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Off",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Viewing settings from another device.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Ready",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "One more step",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Sign out of Windows and back in to finish setting up frame times.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Permission was cancelled",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "No changes were made. You can try Set up again when you are ready.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Frame times could not be set up",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Try again on the PC running SVS Performance Monitor. Open Advanced for technical details.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Sample error: account group update failed. No system changes were made.",
+    "pages": [
+      "settings"
+    ]
+  },
+  {
+    "text": "Live · paused",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Resume",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:00 [FSPMesh] captured shape 129",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:01 [FSPMesh] captured shape 130",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:02 [FSPMesh] captured shape 131",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:03 [FSPMesh] captured shape 132",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:04 [FSPMesh] captured shape 133",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:05 [FSPMesh] captured shape 134",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:06 [FSPMesh] captured shape 135",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:07 [FSPMesh] captured shape 136",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:08 [FSPMesh] captured shape 137",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:09 [FSPMesh] captured shape 138",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:10 [FSPMesh] captured shape 139",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:11 [FSPMesh] captured shape 140",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:12 [FSPMesh] captured shape 141",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:13 [FSPMesh] captured shape 142",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:14 [FSPMesh] captured shape 143",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:15 [FSPMesh] captured shape 144",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:16 [FSPMesh] captured shape 145",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:17 [FSPMesh] captured shape 146",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:18 [FSPMesh] captured shape 147",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:19 [FSPMesh] captured shape 148",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:20 [FSPMesh] captured shape 149",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:21 [FSPMesh] captured shape 150",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:22 [FSPMesh] captured shape 151",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:23 [FSPMesh] captured shape 152",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:24 [FSPMesh] captured shape 153",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:25 [FSPMesh] captured shape 154",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:26 [FSPMesh] captured shape 155",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:27 [FSPMesh] captured shape 156",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:28 [FSPMesh] captured shape 157",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:29 [FSPMesh] captured shape 158",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:30 [FSPMesh] captured shape 159",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:31 [FSPMesh] captured shape 160",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:32 [FSPMesh] captured shape 161",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:33 [FSPMesh] captured shape 162",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:34 [FSPMesh] captured shape 163",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:35 [FSPMesh] captured shape 164",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:36 [FSPMesh] captured shape 165",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:37 [FSPMesh] captured shape 166",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:38 [FSPMesh] captured shape 167",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:39 [FSPMesh] captured shape 168",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:40 [FSPMesh] captured shape 169",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:41 [FSPMesh] captured shape 170",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:42 [FSPMesh] captured shape 171",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:43 [FSPMesh] captured shape 172",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:44 [FSPMesh] captured shape 173",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:45 [FSPMesh] captured shape 174",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:46 [FSPMesh] captured shape 175",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:47 [FSPMesh] captured shape 176",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:48 [FSPMesh] captured shape 177",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:31:49 [FSPMesh] captured shape 178",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "61 lines · 61 shown",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Waiting for lines…",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "0 lines · 0 shown",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Game restarted · 2:34:00 PM",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:34:00 Loading a new game. Previous run cleared.",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2 lines · 2 shown",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "Some lines were missed while this page was disconnected.",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "2026-11-08 14:33:10 Reconnected. Showing the newest available lines.",
+    "pages": [
+      "log"
+    ]
+  },
+  {
+    "text": "13 lines · 13 shown",
+    "pages": [
+      "log"
+    ]
+  }
+]

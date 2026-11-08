@@ -1,0 +1,427 @@
+{
+  "reports": [
+    {
+      "page": "dashboard",
+      "width": 1280,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "settings",
+      "width": 1280,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 1280,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "welcome",
+      "width": 1280,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "tray",
+      "width": 1280,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 1024,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "settings",
+      "width": 1024,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 1024,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "welcome",
+      "width": 1024,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "tray",
+      "width": 1024,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "settings",
+      "width": 390,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 390,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "welcome",
+      "width": 390,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "tray",
+      "width": 390,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 320,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "settings",
+      "width": 320,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 320,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "welcome",
+      "width": 320,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "tray",
+      "width": 320,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "cpu",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "waiting",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "setup",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "basic",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "neither",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "both",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "mixed",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "unknown",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "starting",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "no-frames",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "missing",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "error",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "exited",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "disconnected",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "no-host",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "sampling-off",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "settings",
+      "width": 390,
+      "state": "phone",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "settings",
+      "width": 390,
+      "state": "ready",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "settings",
+      "width": 390,
+      "state": "signout",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "settings",
+      "width": 390,
+      "state": "cancelled",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "settings",
+      "width": 390,
+      "state": "failure",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 390,
+      "state": "paused",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 390,
+      "state": "scrolled",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 390,
+      "state": "reconnecting",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 390,
+      "state": "waiting",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 390,
+      "state": "restart",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 390,
+      "state": "gap",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "",
+      "theme": "light",
+      "overflow": false
+    },
+    {
+      "page": "settings",
+      "width": 390,
+      "state": "",
+      "theme": "light",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 390,
+      "state": "",
+      "theme": "light",
+      "overflow": false
+    },
+    {
+      "page": "welcome",
+      "width": 390,
+      "state": "",
+      "theme": "light",
+      "overflow": false
+    },
+    {
+      "page": "tray",
+      "width": 390,
+      "state": "",
+      "theme": "light",
+      "overflow": false
+    },
+    {
+      "page": "settings",
+      "width": 390,
+      "state": "phone",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "settings",
+      "width": 1024,
+      "state": "pc",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 390,
+      "state": "live",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "log",
+      "width": 390,
+      "state": "scrolled",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "welcome",
+      "width": 390,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "page": "dashboard",
+      "width": 390,
+      "state": "",
+      "theme": "dark",
+      "overflow": false
+    }
+  ],
+  "checks": [
+    "All requested dashboard scenarios",
+    "Advanced has no page overflow",
+    "Phone settings read-only",
+    "Setup preview",
+    "Invalid port",
+    "Case-insensitive log filter",
+    "Level filter and persistent markers",
+    "Clear view only",
+    "Jump to live",
+    "Welcome setup",
+    "Manual and device light theme",
+    "No external requests",
+    "No JavaScript exceptions"
+  ],
+  "errors": [],
+  "external": []
+}

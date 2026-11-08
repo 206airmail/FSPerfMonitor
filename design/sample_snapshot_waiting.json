@@ -1,0 +1,75 @@
+﻿{
+    "time":  "2026-11-08T10:51:44.6851037-09:00",
+    "mode":  "basic",
+    "attached":  false,
+    "pid":  0,
+    "process":  "",
+    "processCpuPct":  0,
+    "cores":  24,
+    "mainThreadBusyPct":  0,
+    "topThreads":  [
+
+                   ],
+    "gpu3DPct":  "NaN",
+    "gpuDedicatedMb":  "NaN",
+    "workingSetMb":  0,
+    "privateMb":  0,
+    "mainThreadModules":  [
+
+                          ],
+    "mainThreadSamples":  0,
+    "fsp":  {
+                "present":  true,
+                "version":  "0.14.0",
+                "channel":  "on",
+                "build":  "1.25.1.0 Steam",
+                "plugins":  [
+                                {
+                                    "name":  "FS25_3dTerrain",
+                                    "version":  "1.0.0.0",
+                                    "state":  "active",
+                                    "reason":  "",
+                                    "fields":  {
+                                                   "voxelApi":  "48",
+                                                   "t3dBuild":  "1.25.1.0 Steam"
+                                               }
+                                },
+                                {
+                                    "name":  "FSPMesh",
+                                    "version":  "0.3.0",
+                                    "state":  "active",
+                                    "reason":  "",
+                                    "fields":  {
+                                                   "shapesB":  "ok",
+                                                   "hook":  "1",
+                                                   "shapes":  "on",
+                                                   "capturesMax":  "1024",
+                                                   "captures":  "0",
+                                                   "heldMB":  "0.0",
+                                                   "madeRefused":  "0/0"
+                                               }
+                                },
+                                {
+                                    "name":  "RaiseTipLimit",
+                                    "version":  "1.0.1",
+                                    "state":  "active",
+                                    "reason":  "",
+                                    "fields":  {
+                                                   "profileDir":  "1"
+                                               }
+                                }
+                            ],
+                "services":  [
+                                 "FSPMesh.api 1.0 (FSPMesh)",
+                                 "FSPMesh.shapes 1.0 (FSPMesh)"
+                             ],
+                "written":  "2026-11-08T06:24:29.5961973-09:00"
+            },
+    "verdict":  {
+                    "label":  "waiting",
+                    "reason":  "the game is not running"
+                },
+    "note":  "",
+    "frames":  null,
+    "elevated":  true
+}

@@ -14,6 +14,7 @@ public sealed class AppSettings
     public bool StartWithWindows { get; set; }              // #7: Run entry, or the task's logon trigger with full permissions
     public bool RunWithFullPermissions { get; set; }        // #7: the scheduled task (highest privileges)
     public bool WelcomeShown { get; set; }                  // #8: the first start opens /welcome instead of the dashboard
+    public bool HomeNetwork { get; set; }                   // #9: the dashboard also on the home network (+ firewall rule)
     public string UserCopy { get; set; } = "";              // the user's own starter (not the protected copy): the Run entry's target
 
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
@@ -29,8 +30,9 @@ public sealed class AppSettings
 
 // what GET /api/settings returns: the settings, whether this viewer may change them, and the facts the page shows
 // FrameTimes: "ready" | "signout" (in the group, sign out and back in) | "setup" (not set up) | "missing" (no PresentMon)
+// NetworkUrls: the addresses a phone at home opens (only while the dashboard listens on the home network)
 public sealed record SettingsView(AppSettings Settings, bool CanEdit, string ReadOnlyReason, string DefaultProfileFolder,
-    string Version, string Url, string Token, string FrameTimes, bool Elevated);
+    string Version, string Url, string Token, string FrameTimes, bool Elevated, List<string> NetworkUrls);
 
 public static class SettingsStore
 {
@@ -88,6 +90,7 @@ public static class SettingsStore
             SampleHz = s.MainLoopBreakdown ? 250 : 0,
             ProfileDir = s.ProfileFolder.Length > 0 ? s.ProfileFolder : DefaultProfileFolder,
             NoBrowser = !s.OpenDashboardOnStart,
+            Lan = s.HomeNetwork,
         };
         // a start by Windows (logon) or a hand-over to the full-permissions copy never opens the browser
         if (args.Contains("--autostart")) o.NoBrowser = true;

@@ -19,7 +19,8 @@
 <div class="setting"><div><div class="setting-title">Show frame times (FPS and stutter)</div><p>Windows will ask for permission once, then sign out and back in. After that, SVS Performance Monitor can show FPS without full permissions.</p></div><div class="actions"><span class="tag" id="setup-status">Checking…</span><button type="button" class="primary" id="setup" hidden>Set up</button></div></div>
 </section>
 <section class="card"><h2>Phone and home network</h2>
-<div class="setting"><div><div class="setting-title">Let my phone or other computers at home open the dashboard</div><p>They can also see your game log, which shows your Windows user name and mod list. Use a trusted private home network. Windows will ask once.</p></div><div class="actions"><span class="tag">Next update</span><label class="check-target" title="Let my phone or other computers at home open the dashboard"><input id="lan" type="checkbox" aria-label="Let my phone or other computers at home open the dashboard" disabled></label></div></div>
+<div class="setting"><div><div class="setting-title">Let my phone or other computers at home open the dashboard</div><p>They can also see your game log, which shows your Windows user name and mod list. Use a trusted private home network. Windows will ask once.</p></div><label class="check-target" title="Let my phone or other computers at home open the dashboard"><input id="lan" type="checkbox" aria-label="Let my phone or other computers at home open the dashboard"></label></div>
+<p class="meta" id="network-address">Home network sharing is off.</p>
 </section>
 <section class="card"><h2>Advanced</h2>
 <div class="setting"><div><div class="setting-title">Run with full permissions</div><p>Shows frame times without the setup above, and is needed for the detailed mod breakdown (coming later). Windows asks once when you turn it on or off.</p></div><label class="check-target" title="Run with full permissions"><input id="elevated" type="checkbox" aria-label="Run with full permissions"></label></div>
@@ -55,13 +56,18 @@ function show(v) {
   $("open-browser").checked = s.openDashboardOnStart;
   $("startup").checked = s.startWithWindows;
   $("elevated").checked = s.runWithFullPermissions;
+  $("lan").checked = s.homeNetwork;
+  const urls = v.networkUrls || [];
+  $("network-address").textContent = !s.homeNetwork ? "Home network sharing is off."
+    : urls.length ? "On your phone, open " + urls.join(" or ") + " · home network only"
+    : "Home network sharing is on, but this PC has no home network address right now.";
   $("sampling-enabled").checked = s.mainLoopBreakdown;
   $("profile").value = s.profileFolder || v.defaultProfileFolder;
   $("port").value = s.port;
   $("version").textContent = v.version;
   const ro = !v.canEdit;
   $("settings-origin").textContent = ro ? "Read-only" : "This PC";
-  for (const id of ["startup", "elevated", "open-browser", "sampling-enabled", "profile", "port"]) {
+  for (const id of ["startup", "elevated", "lan", "open-browser", "sampling-enabled", "profile", "port"]) {
     const el = $(id);
     if (el.type === "checkbox") el.disabled = ro; else el.readOnly = ro;
   }
@@ -144,6 +150,7 @@ $("settings-form").onsubmit = async e => {
   const s = Object.assign({}, view.settings, {
     startWithWindows: $("startup").checked,
     runWithFullPermissions: $("elevated").checked,
+    homeNetwork: $("lan").checked,
     openDashboardOnStart: $("open-browser").checked,
     mainLoopBreakdown: $("sampling-enabled").checked,
     profileFolder: profile === view.defaultProfileFolder ? "" : profile,
@@ -155,6 +162,8 @@ $("settings-form").onsubmit = async e => {
     const body = await r.json();
     if (!r.ok) {
       if (r.status === 403) { notice("Settings were not saved", body + " Reload this page and try again."); return; }
+      // a Windows step (permission prompt, start-up, firewall): a notice, and show what was saved after all
+      if (r.status === 422 && /Windows|permission|protected copy/i.test(body)) { notice("Not everything was changed", body); await load(); return; }
       if (r.status === 422 && /folder/i.test(body)) fieldError("profile", body);
       else if (r.status === 422) fieldError("port", body);
       else notice("Settings were not saved", body);

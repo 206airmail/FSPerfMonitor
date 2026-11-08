@@ -52,12 +52,21 @@ public static unsafe class TrayApp
                 s.UserCopy = was.UserCopy;   // never from the page: it decides what Windows starts
                 problem = ApplyStartup(was, s);   // may show a Windows permission prompt and wait for it
                 if (problem != null) return problem;
+                // the firewall next: refused or failed = the network part keeps its old values, the rest (incl. the start-up
+                // just applied to Windows) is still saved, so file and Windows agree
+                string? netProblem = ApplyNetwork(was, s);
+                if (netProblem != null) { s.HomeNetwork = was.HomeNetwork; s.Port = was.Port; }
                 lock (s_settingsLock) {
                     try { SettingsStore.Save(s); } catch (Exception e) { return "Could not save the settings: " + e.Message; }
                     s_settings = s;
                 }
                 bool restart = was.Port != s.Port || was.MainLoopBreakdown != s.MainLoopBreakdown || was.ProfileFolder != s.ProfileFolder
-                    || was.RunWithFullPermissions != s.RunWithFullPermissions;
+                    || was.RunWithFullPermissions != s.RunWithFullPermissions || was.HomeNetwork != s.HomeNetwork;
+                if (netProblem != null) {
+                    // partly saved: apply what was saved (the page gets the error, so Saved() won't come), then say why
+                    if (restart) TrayNative.PostMessageW(s_hwnd, WM_SETTINGS_SAVED, IntPtr.Zero, IntPtr.Zero);
+                    return netProblem + " Your other changes were saved.";
+                }
                 if (restart) Interlocked.Exchange(ref s_restartNeeded, 1);
             }
             return null;
@@ -106,6 +115,26 @@ public static unsafe class TrayApp
                 AutoStart.SetRunEntry(s_instance, now.StartWithWindows, userCopy);
             }
         } catch (Exception e) { return "Could not change how SVS Performance Monitor starts: " + e.Message; }
+        return null;
+    }
+
+    // "phone / home network" changed (or the port while it is on): the firewall rule follows (a permission prompt, skipped
+    // when the rule is already there). Refused = nothing changes.
+    private static string? ApplyNetwork(AppSettings was, AppSettings now)
+    {
+        bool wasOn = was.HomeNetwork, on = now.HomeNetwork;
+        if (wasOn == on && (!on || was.Port == now.Port)) return null;
+        static string Why(int r) => r == AutoStart.ExitCancelled
+            ? "Windows' permission was not given, so nothing was changed."
+            : "Windows could not change the firewall for the dashboard. Nothing was changed.";
+        if (on && !AutoStart.FirewallRuleExists(now.Port)) {
+            int r = AutoStart.Admin($"firewall-add {now.Port}");
+            if (r != AutoStart.ExitOk) return Why(r);
+        }
+        if (wasOn && (!on || was.Port != now.Port) && AutoStart.FirewallRuleExists(was.Port)) {
+            int r = AutoStart.Admin($"firewall-delete {was.Port}");
+            if (r != AutoStart.ExitOk && r != AutoStart.ExitCancelled) return Why(r);   // a refused clean-up leaves only an unused rule
+        }
         return null;
     }
 

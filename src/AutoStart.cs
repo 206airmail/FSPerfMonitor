@@ -119,6 +119,44 @@ public static unsafe class AutoStart
         } catch { return -1; }
     }
 
+    // ---- phone / home network (#9): the inbound firewall rule ----
+    // One rule per port: TCP, inbound, private networks only, from the local subnet only. Port-based (not tied to a
+    // program path), like the rule FSPerf always printed; created and removed by the admin helper (one prompt).
+
+    public static string FirewallRuleName(int port) => $"SVS Performance Monitor dashboard (TCP {port})";
+
+    public static bool FirewallRuleExists(int port) => Netsh($"advfirewall firewall show rule name=\"{FirewallRuleName(port)}\"") == 0;
+
+    private static int Netsh(string args)
+    {
+        try {
+            var psi = new ProcessStartInfo(System32("netsh.exe"), args) {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            using var p = Process.Start(psi)!;
+            p.StandardOutput.ReadToEnd(); p.StandardError.ReadToEnd();
+            return p.WaitForExit(15000) ? p.ExitCode : -1;
+        } catch { return -1; }
+    }
+
+    // the addresses a phone at home can open: IPv4 of network adapters that are up and have a gateway (the real home
+    // network, not WSL / Hyper-V switches)
+    public static List<string> HomeNetworkAddresses()
+    {
+        var list = new List<string>();
+        try {
+            foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()) {
+                if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                var ip = ni.GetIPProperties();
+                if (!ip.GatewayAddresses.Any(g => g.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !g.Address.Equals(System.Net.IPAddress.Any))) continue;
+                foreach (var ua in ip.UnicastAddresses)
+                    if (ua.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !System.Net.IPAddress.IsLoopback(ua.Address)
+                        && !ua.Address.ToString().StartsWith("169.254.", StringComparison.Ordinal))
+                        list.Add(ua.Address.ToString());
+            }
+        } catch { }
+        return list;
+    }
+
     // ---- frame times: Performance Log Users ----
 
     // "ready" (this login can read frame events), "signout" (the account is in the group, this login predates it),
@@ -177,7 +215,8 @@ public static unsafe class AutoStart
         } finally { Native.CloseHandle(sei.hProcess); }
     }
 
-    // `--admin task-set <sid> <logon 0|1> <instance>` / `--admin task-delete <sid> <instance>` / `--admin perflog <sid>`
+    // `--admin task-set <sid> <logon 0|1> <instance>` / `--admin task-delete <sid> <instance>` / `--admin perflog <sid>` /
+    // `--admin firewall-add <port>` / `--admin firewall-delete <port>`
     public static int AdminMain(string[] a)
     {
         try {
@@ -237,6 +276,17 @@ public static unsafe class AutoStart
                     } catch { }
                     return gone ? ExitOk : ExitFailed;
                 }
+                case "firewall-add": {   // `firewall-add <port>`: the dashboard's port on private networks, local subnet only
+                    int port = ValidPort(a[2]);
+                    if (FirewallRuleExists(port)) return ExitOk;
+                    return Netsh($"advfirewall firewall add rule name=\"{FirewallRuleName(port)}\" dir=in action=allow protocol=TCP " +
+                        $"localport={port} profile=private remoteip=localsubnet") == 0 ? ExitOk : ExitFailed;
+                }
+                case "firewall-delete": {   // `firewall-delete <port>`
+                    int port = ValidPort(a[2]);
+                    if (!FirewallRuleExists(port)) return ExitOk;
+                    return Netsh($"advfirewall firewall delete rule name=\"{FirewallRuleName(port)}\"") == 0 ? ExitOk : ExitFailed;
+                }
                 case "perflog": {
                     var sid = new SecurityIdentifier(ValidUserSid(a[2]));
                     byte[] bin = new byte[sid.BinaryLength];
@@ -267,6 +317,10 @@ public static unsafe class AutoStart
             throw new ArgumentException("not a user SID");
         return sid.Value;
     }
+
+    private static int ValidPort(string s) =>
+        int.TryParse(s, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int p) && p is >= 1 and <= 65535
+            ? p : throw new ArgumentException("port");
 
     private static string ValidInstance(string s) =>
         s.Length is > 0 and <= 64 && s.All(c => char.IsAsciiLetterOrDigit(c) || c == '_') ? s : throw new ArgumentException("instance");

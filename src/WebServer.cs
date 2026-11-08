@@ -407,7 +407,8 @@ public sealed class WebServer : IDisposable
         bool canEdit = b != null && local;
         string frames = !FrameMonitor.PresentMonAvailable(null) ? "missing" : AutoStart.FrameTimesAccess();
         var view = new SettingsView(b?.Current ?? new AppSettings(), canEdit, why, SettingsStore.DefaultProfileFolder,
-            Program.Version, $"http://127.0.0.1:{_port}/", canEdit ? _saveToken : "", frames, AutoStart.IsElevated());
+            Program.Version, $"http://127.0.0.1:{_port}/", canEdit ? _saveToken : "", frames, AutoStart.IsElevated(),
+            _lanMode ? AutoStart.HomeNetworkAddresses().Select(ip => $"http://{ip}:{_port}/").ToList() : new List<string>());
         return System.Text.Json.JsonSerializer.Serialize(view, FsperfJson.Default.SettingsView);
     }
 

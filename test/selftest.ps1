@@ -195,7 +195,13 @@ foreach ($logon in '1', '0') {
     Check ($parsed -and $runLevel -eq 1 -and $triggers -eq [int]$logon) "full permissions: the task definition is valid (logon trigger $logon, highest run level) $err"
 }
 # the admin helper refuses to work without admin rights (it never prompts by itself)
-if (-not $isAdmin) { $null = & $exe --admin task-delete SVSPerfSelfTest; Check ($LASTEXITCODE -eq 1) "the admin helper refuses without admin rights" }
+if (-not $isAdmin) {
+    $null = & $exe --admin task-delete SVSPerfSelfTest; $c1 = $LASTEXITCODE
+    $null = & $exe --admin firewall-add 8765; $c2 = $LASTEXITCODE
+    Check ($c1 -eq 1 -and $c2 -eq 1) "the admin helper refuses without admin rights (task, firewall)"
+}
+# phone / home network (#9) off = no phone address offered (turning it on needs a permission prompt: manual test)
+Check (@($v5.networkUrls).Count -eq 0 -and -not $v5.settings.homeNetwork) "home network off: the page offers no phone address"
 Remove-Item $sf -ErrorAction SilentlyContinue
 
 # the published pair (-Exe publish\SVSPerfMonitor.com): the starter SVSPerfMonitor.exe next to it

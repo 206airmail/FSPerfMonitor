@@ -214,7 +214,11 @@ public sealed class WebServer : IDisposable
                     if (resumed && afterSeq > tail.LastSeq) { afterSeq = -1; resumed = false; }
                     var lines = tail.Snapshot(afterSeq, n, out bool gap);
                     cl.Enqueue("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nX-Accel-Buffering: no\r\nConnection: keep-alive\r\n\r\nretry: 2000\n\n");
-                    if (lines.Count > 0 || !resumed) cl.Enqueue(new HistoryItem(lines, !resumed, gap, lines.Count > 0 ? lines[^1].Seq : tail.LastSeq));
+                    // the game restarted after this viewer's last line, but the marker already left the ring (Codex #46): the
+                    // batch cannot carry the boundary, so tell the page to drop what it shows (reset) instead
+                    long mk = tail.LastMarkerSeq;
+                    bool lostRestart = resumed && mk > afterSeq && lines.Count > 0 && lines[0].Seq > mk;
+                    if (lines.Count > 0 || !resumed) cl.Enqueue(new HistoryItem(lines, !resumed || lostRestart, gap, lines.Count > 0 ? lines[^1].Seq : tail.LastSeq));
                     _logClients.Add(cl);
                     client = cl;
                 }

@@ -68,6 +68,10 @@ public static class LogTailSelfTest
             t.Poll();
             Check(seen.Count == 2 && seen[0].Marker && seen[1].Text == "fresh start", "truncated file: restart marker, then the new lines");
             Check(seen.Count == 2 && seen[0].Seq == before + 1 && seen[1].Seq == before + 2, "sequence numbers continue across a restart");
+            var fresh = t.Snapshot(-1, 50, out _);
+            Check(fresh.Count == 2 && fresh[0].Marker && fresh[1].Text == "fresh start", "a fresh view starts at the newest restart marker, not in the previous run");
+            Check(t.Snapshot(before - 2, 50, out _).Count == 4, "a resume (after = seq) still gets the lines before the marker");
+            Check(t.LastMarkerSeq == before + 1, "LastMarkerSeq = the restart marker's seq (a resume whose batch lost it gets reset)");
 
             // delete + recreate (new file identity), even if the new file is longer than the old offset
             seen.Clear();

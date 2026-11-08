@@ -36,6 +36,7 @@ public sealed class LogTail : IDisposable
     private const int ChunkBytes = 256 * 1024, MaxBytesPerPoll = 4 * 1024 * 1024, MaxPendingBytes = 256 * 1024;
 
     private long _next = 1;                  // seq of the next line (under _gate)
+    private long _lastMarker;                // seq of the newest restart marker, 0 = none (under _gate)
     private int _ticks;
 
     public string Epoch { get; } = Guid.NewGuid().ToString("N")[..8];   // changes when FSPerf restarts (seq starts over)
@@ -67,16 +68,18 @@ public sealed class LogTail : IDisposable
     }
 
     public long LastSeq { get { lock (_gate) return _next - 1; } }
+    public long LastMarkerSeq { get { lock (_gate) return _lastMarker; } }   // the newest restart marker's seq, 0 = none
 
-    // the lines after seq `after` (after < 0: the newest `n`). gap = the ring no longer holds line after+1. Call under Gate when
-    // the result must line up with the live batches.
+    // the lines after seq `after` (after < 0: the newest `n`, but never from before the newest restart marker: a page that
+    // opens fresh shows only the current game run, Nick 2026-11-07). gap = the ring no longer holds line after+1. Call under
+    // Gate when the result must line up with the live batches.
     public List<LogLine> Snapshot(long after, int n, out bool gap)
     {
         lock (_gate) {
             long last = _next - 1, first = Math.Max(1, _next - _ring.Length);
             gap = false;
             long from;
-            if (after < 0) from = Math.Max(first, last - Math.Max(0, n) + 1);
+            if (after < 0) from = Math.Max(Math.Max(first, last - Math.Max(0, n) + 1), _lastMarker);
             else {
                 from = after + 1;
                 if (from < first) { from = first; gap = true; }
@@ -100,6 +103,7 @@ public sealed class LogTail : IDisposable
                     var l = batch[i] with { Seq = _next++ };
                     batch[i] = l;
                     _ring[l.Seq % _ring.Length] = l;
+                    if (l.Marker) _lastMarker = l.Seq;
                 }
                 try { Appended?.Invoke(batch); } catch { }
             }

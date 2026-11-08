@@ -39,7 +39,8 @@ only). The page keeps the last 10,000 lines and shows at most 3,000 at a time.
   log is never read whole: it starts from the last 1 MB). The newest 5,000 lines are kept in memory, so a client gets the
   recent history at once. Partial last lines wait for their newline.
 - **Restart:** the game rewrites `log.txt` on every start. FSPerf notices (file identity, size shrinking, or a changed
-  header) and sends a "log restarted" marker, then the new lines.
+  header) and sends a "log restarted" marker, then the new lines. The page then clears and starts fresh from that marker,
+  and a page opened later starts at the newest restart, not in the previous run (0.3.1).
 - **Endpoint:** `GET /log/stream?n=500` is server-sent events in batches: `id: <epoch>.<seq>`, data
   `{"e","reset","gap","lines":[[seq,text,marker],...]}`. A reconnecting browser sends `Last-Event-ID` (or `&after=<id>`)
   and gets exactly the missed lines, none twice; if the ring no longer holds them the page shows a "lines were missed"

@@ -1,4 +1,5 @@
 src/bin/
 src/obj/
 publish/
-tools/
+# downloaded by build.ps1 -FetchPresentMon (not ours to commit)
+tools/PresentMon-*.exe

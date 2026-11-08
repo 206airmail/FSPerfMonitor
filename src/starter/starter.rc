@@ -1,0 +1,33 @@
+// starter.rc - icon, version information and manifest of SVSPerfMonitor.exe (what Explorer, the file properties and
+// Windows' prompts show). SVS_VER_COMMA / SVS_VER_STR: starter_ver.h, written by build.ps1 from the csproj <Version>.
+#include <winver.h>
+#include "starter_ver.h"
+
+1 ICON "..\\app.ico"
+1 24 "starter.manifest"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION SVS_VER_COMMA
+ PRODUCTVERSION SVS_VER_COMMA
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "SimVizion Studios"
+      VALUE "FileDescription", "SVS Performance Monitor"
+      VALUE "FileVersion", SVS_VER_STR
+      VALUE "InternalName", "SVSPerfMonitor"
+      VALUE "LegalCopyright", "Copyright (c) 2026 Jared Brown. MIT licence."
+      VALUE "OriginalFilename", "SVSPerfMonitor.exe"
+      VALUE "ProductName", "SVS Performance Monitor"
+      VALUE "ProductVersion", SVS_VER_STR
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

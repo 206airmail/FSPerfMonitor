@@ -2,6 +2,8 @@
 // MIT licence. See ..\README.md.
 //   SVSPerfMonitor [--port 8765] [--interval-ms 1000] [--sample-hz 0|250] [--record <file.csv>] [--pid <n>] [--profile <dir>]
 //          [--once] [--no-browser] [--presentmon <exe>] [--no-frames] [--lan]
+//   SVSPerfMonitor            (no arguments, e.g. a double-click) or --tray [options]: the tray app, one copy per user
+//   SVSPerfMonitor --exit     asks the running tray app to quit cleanly (stops its frame capture)
 //   --lan: the dashboard is also reachable from other computers (http://<this PC's IP>:<port>/); needs an inbound firewall
 //          rule for the port (printed when missing). The page is read-only.
 //   SVSPerfMonitor --burn <seconds>     (self-test helper: one busy main thread)
@@ -26,6 +28,9 @@ public sealed class Options
     public string? PresentMon;  // full mode: PresentMon console exe (default: next to SVSPerfMonitor.exe or in tools\)
     public bool NoFrames;       // basic mode only
     public bool Lan;            // listen on all interfaces, not only loopback
+    public bool Tray;           // the tray app (also: no arguments at all, i.e. a double-click)
+    public bool Exit;           // ask the running tray app to quit cleanly
+    public string Instance = "SVSPerfMonitor";   // single-instance name (the self-test uses its own)
 
     public static Options Parse(string[] a)
     {
@@ -45,6 +50,10 @@ public sealed class Options
                 case "--presentmon": o.PresentMon = Next(); break;
                 case "--no-frames": o.NoFrames = true; break;
                 case "--lan": o.Lan = true; break;
+                case "--tray": o.Tray = true; break;
+                case "--exit": o.Exit = true; break;
+                case "--instance": o.Instance = Next(); break;
+                case "--tray-child": break;   // internal marker (Main)
                 default: throw new ArgumentException($"unknown option {a[i]}");
             }
         }
@@ -56,8 +65,18 @@ public static class Program
 {
     public static readonly string Version = typeof(Program).Assembly.GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{v.Build}" : "?";  // = csproj <Version> (#11)
 
+    private const string TrayChildArg = "--tray-child";   // internal: the console-less copy the tray app restarted as
+
     public static int Main(string[] args)
     {
+        bool tray = args.Length == 0 || args.Contains("--tray") || args.Contains(TrayChildArg);
+        // the tray app never keeps a console: started from a terminal it would block it (a console program), and on Windows
+        // before 11 24H2 a double-click opens a console window. Then start a console-less copy and leave (a brief flash).
+        if (tray && !args.Contains(TrayChildArg) && TrayNative.GetConsoleWindow() != IntPtr.Zero) {
+            // no inherited handles: a shell that captures our output must not wait for the tray copy
+            if (TrayNative.StartDetached(Environment.ProcessPath!, [.. args, TrayChildArg])) return 0;
+        }
+        args = args.Where(a => a != TrayChildArg).ToArray();
         if (args.Length == 2 && args[0] == "--burn") return Burn(int.Parse(args[1], CultureInfo.InvariantCulture));
         if (args.Length == 4 && args[0] == "--judge") {  // self-test helper: the full-mode verdict for frame / CPU busy / GPU busy ms
             double P(string x) => double.Parse(x, CultureInfo.InvariantCulture);
@@ -77,20 +96,27 @@ public static class Program
         if (args.Length == 1 && args[0] == "--logtail-selftest") return LogTailSelfTest.Run();   // self-test helper
         Options o;
         try { o = Options.Parse(args); } catch (Exception e) { Console.Error.WriteLine($"SVSPerfMonitor: {e.Message}"); return 2; }
-        using var col = new Collector(o);
+        if (o.Exit) {
+            int r = TrayApp.SignalExit(o.Instance);
+            Console.WriteLine(r == 0 ? "SVS Performance Monitor: stopped" : r == 1 ? "SVS Performance Monitor: not running" : "SVS Performance Monitor: did not stop in time");
+            return r;
+        }
+        if (tray) { o.Tray = true; return TrayApp.Run(o); }
         if (o.Once) {
+            using var col = new Collector(o);
             col.Tick();
             Thread.Sleep(o.IntervalMs);
             Console.WriteLine(JsonSerializer.Serialize(col.Tick(), FsperfJson.Default.Snapshot));
             return 0;
         }
-        using var rec = o.Record != null ? new CsvRecorder(o.Record) : null;
-        using var tail = new LogTail(Path.Combine(o.ProfileDir, "log.txt"));
-        using var web = new WebServer(o.Port, o.Lan, tail);
-        web.Start();
-        tail.Start();
-        string url = $"http://127.0.0.1:{o.Port}/";
-        Console.WriteLine($"SVS Performance Monitor {Version}: dashboard {url}  (Ctrl+C to stop){(rec != null ? "  recording " + o.Record : "")}");
+        MonitorHost host;
+        try { host = new MonitorHost(o); }
+        catch (System.Net.Sockets.SocketException e) { Console.Error.WriteLine($"SVSPerfMonitor: port {o.Port}: {e.Message}"); return 3; }
+        using var _ = host;
+        host.Error += m => Console.Error.WriteLine("SVSPerfMonitor: " + m);
+        host.Start();
+        string url = host.Url;
+        Console.WriteLine($"SVS Performance Monitor {Version}: dashboard {url}  (Ctrl+C to stop){(o.Record != null ? "  recording " + o.Record : "")}");
         if (o.Lan) {
             foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()) {
                 if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
@@ -103,26 +129,11 @@ public static class Program
             Console.WriteLine($"  other computers need an inbound firewall rule for TCP {o.Port} (admin PowerShell, once):");
             Console.WriteLine($"  New-NetFirewallRule -DisplayName 'SVS Performance Monitor dashboard' -Direction Inbound -Protocol TCP -LocalPort {o.Port} -Action Allow -Profile Private -RemoteAddress LocalSubnet");
         }
-        if (!o.NoBrowser) {
-            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
-        }
+        if (!o.NoBrowser) TrayApp.OpenUrl(url);
         var stop = new ManualResetEventSlim();
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Set(); };
-        var until = o.Seconds > 0 ? DateTime.UtcNow.AddSeconds(o.Seconds) : DateTime.MaxValue;
-        try { col.Tick(); } catch { }
-        string lastError = "";
-        while (!stop.Wait(o.IntervalMs) && DateTime.UtcNow < until) {
-            try {
-                var s = col.Tick();
-                web.Publish(JsonSerializer.Serialize(s, FsperfJson.Default.Snapshot));
-                rec?.Write(s);
-                lastError = "";
-            } catch (Exception e) {   // one bad sample never ends the monitor (the game comes and goes all day)
-                if (e.Message != lastError) Console.Error.WriteLine($"SVSPerfMonitor: sample failed ({e.GetType().Name}: {e.Message}); retrying");
-                lastError = e.Message;
-            }
-        }
-        return 0;
+        while (!stop.Wait(200) && !host.WaitForStop(0)) { }
+        return 0;   // disposing the host stops the monitor and the frame capture
     }
 
     // a process whose main thread spins: the self-test attaches to it (--pid) and must see ~100% main-thread busy

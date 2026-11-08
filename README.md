@@ -12,15 +12,28 @@ without FSPluginHost too.
 
 ## Use
 
+**Players:** double-click `SVSPerfMonitor.exe`. An SV icon appears in the notification area (grey = waiting for the
+game, colour = watching it; hover it for what limits the game). Double-click the icon for the dashboard; right-click
+for Open dashboard / Game log / Exit. Only one copy runs; starting it again opens the dashboard. Exit stops everything
+cleanly (0.4).
+
+**The two files (0.4):** `SVSPerfMonitor.exe` is a tiny starter (a Windows program, so no console window appears on any
+Windows version, Windows 10 included); `SVSPerfMonitor.com` next to it is the program itself (a console program, so a
+terminal or script gets its output and exit code). Typing `SVSPerfMonitor` in a terminal runs the `.com` (Windows tries
+`.COM` before `.EXE`), as Visual Studio does with `devenv.exe` / `devenv.com`. Keep both files together.
+
 ```
-build.ps1 -FetchPresentMon     (needs the .NET 10 SDK; downloads PresentMon 2.6.0 for full mode, hash-checked;
-                                -Publish = one native SVSPerfMonitor.exe (~8 MB) + PresentMon in publish\)
-SVSPerfMonitor                  dashboard on http://127.0.0.1:8765/, opens the browser, waits for the game
+build.ps1 -FetchPresentMon     (needs the .NET 10 SDK; downloads PresentMon 2.6.0 for frame times, hash-checked;
+                                -Publish = publish\SVSPerfMonitor.exe (starter) + SVSPerfMonitor.com (native, ~8 MB)
+                                + PresentMon; needs the Visual Studio C++ build tools)
+SVSPerfMonitor                  the tray app (no arguments = a double-click); --tray [options] = the same with options
+SVSPerfMonitor --exit           asks the running tray app to quit cleanly (stops its frame capture); exit 1 = none ran
+SVSPerfMonitor --no-browser ... command line: dashboard on http://127.0.0.1:8765/ until Ctrl+C (any option but --tray)
 SVSPerfMonitor --record run.csv the same, plus one CSV line per tick
 SVSPerfMonitor --once           one JSON snapshot to stdout (for scripts and test runners)
 SVSPerfMonitor --lan            the dashboard also on the network: http://<this PC's IP>:8765/ (0.2.2)
    options: --port <n> --interval-ms <ms> --sample-hz <hz> --pid <n> --profile <dir> --seconds <n> --no-browser
-            --presentmon <exe> --no-frames --lan
+            --presentmon <exe> --no-frames --lan --instance <name>
 ```
 
 `--lan` listens on all interfaces (no URL reservation needed). Other computers also need one inbound firewall rule,

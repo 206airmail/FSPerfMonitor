@@ -88,6 +88,48 @@ $mon.WaitForExit(15000) | Out-Null
 $err = Get-Content (Join-Path $env:TEMP 'fsperf_selftest_err.txt') -Raw -ErrorAction SilentlyContinue
 Check ($mon.HasExited -and $mon.ExitCode -eq 0 -and "$err" -notmatch 'Unhandled exception') "the game exiting under the monitor is no crash (exit $($mon.ExitCode))"
 
+# 0.4 tray app (#5), under its own instance name and port (never a real running copy): one copy only, a clean --exit
+$inst = 'SVSPerfSelfTest_' + [guid]::NewGuid().ToString('N').Substring(0, 6)
+$t1 = Start-Process $exe -ArgumentList '--tray', '--no-browser', '--no-frames', '--port', '8798', '--instance', $inst -PassThru
+$null = $t1.Handle
+$up = $false
+for ($i = 0; $i -lt 40 -and -not $up; $i++) { Start-Sleep -Milliseconds 250; try { $null = Invoke-WebRequest 'http://127.0.0.1:8798/api/snapshot' -UseBasicParsing -TimeoutSec 2; $up = $true } catch { } }
+Check ($up -and -not $t1.HasExited) "tray app: running, dashboard answers on its port"
+$t2 = Start-Process $exe -ArgumentList '--tray', '--no-browser', '--no-frames', '--port', '8798', '--instance', $inst -PassThru
+$null = $t2.Handle
+Check ($t2.WaitForExit(5000) -and $t2.ExitCode -eq 0 -and -not $t1.HasExited) "tray app: a second start leaves the first one running and exits (exit $($t2.ExitCode))"
+$ex = & $exe --exit --instance $inst
+$exCode = $LASTEXITCODE
+Check ($exCode -eq 0 -and $t1.WaitForExit(15000) -and $t1.ExitCode -eq 0) "tray app: --exit stops it cleanly ('$ex', exit $($t1.ExitCode))"
+$closed = $false; try { $null = Invoke-WebRequest 'http://127.0.0.1:8798/' -UseBasicParsing -TimeoutSec 2 } catch { $closed = $true }
+Check $closed "tray app: its port is closed after the exit"
+$ex2 = & $exe --exit --instance $inst
+Check ($LASTEXITCODE -eq 1) "--exit with nothing running says so ('$ex2')"
+if (-not $t1.HasExited) { Stop-Process -Id $t1.Id -Force }
+
+# the published pair (-Exe publish\SVSPerfMonitor.com): the starter SVSPerfMonitor.exe next to it
+$starter = [IO.Path]::ChangeExtension($exe, '.exe')
+if ($exe -like '*.com' -and (Test-Path $starter)) {
+    $inst = 'SVSPerfSelfTest_' + [guid]::NewGuid().ToString('N').Substring(0, 6)
+    $s = Start-Process $starter -ArgumentList '--tray', '--no-browser', '--no-frames', '--port', '8798', '--instance', $inst -PassThru
+    $null = $s.Handle
+    $sOk = $s.WaitForExit(5000) -and $s.ExitCode -eq 0
+    Start-Sleep -Milliseconds 1500
+    $tc = @(Get-CimInstance Win32_Process -Filter "Name='SVSPerfMonitor.com'" | Where-Object { $_.CommandLine -match $inst -and $_.CommandLine -match '--tray-child' })
+    $up = $false; for ($i = 0; $i -lt 20 -and -not $up; $i++) { try { $null = Invoke-WebRequest 'http://127.0.0.1:8798/api/snapshot' -UseBasicParsing -TimeoutSec 2; $up = $true } catch { Start-Sleep -Milliseconds 250 } }
+    Check ($sOk -and $tc.Count -eq 1 -and $up) "starter: SVSPerfMonitor.exe starts the tray program without a console window and leaves (copies: $($tc.Count))"
+    $ex = & $exe --exit --instance $inst
+    Check ($LASTEXITCODE -eq 0) "starter: the tray copy it started stops cleanly with --exit ('$ex')"
+    # the command line through the starter: output and exit code pass through (piped, as scripts do)
+    $sj = & $starter --once --pid $PID --no-frames | ConvertFrom-Json
+    Check ($sj.attached -and $sj.pid -eq $PID) "starter: command line through SVSPerfMonitor.exe passes the output through"
+    # a bare name finds the .com first (PATHEXT): what `SVSPerfMonitor` in a terminal runs
+    Push-Location (Split-Path $exe)
+    $resolved = (Get-Command .\SVSPerfMonitor -ErrorAction SilentlyContinue).Source
+    Pop-Location
+    Check ($resolved -like '*.com') "a bare 'SVSPerfMonitor' resolves to the .com program ($resolved)"
+}
+
 # 0.3 log tail: the tailer against temp files (appends, partial line, truncate/recreate, ring bounds, resume)
 $lt = & $exe --logtail-selftest
 $lt | ForEach-Object { Write-Host $_ }

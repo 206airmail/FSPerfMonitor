@@ -1,5 +1,5 @@
-// EtwSessions.cs - housekeeping for FSPerf's own ETW trace sessions (FSPerf_<pid>). PresentMon opens one per capture; a
-// killed fsperf (Stop-Process -Force, crash, power loss) never stops it, and an orphaned session starves every later
+// EtwSessions.cs - housekeeping for the monitor's own ETW trace sessions (SVSPerf_<pid>). PresentMon opens one per capture; a
+// killed monitor (Stop-Process -Force, crash, power loss) never stops it, and an orphaned session starves every later
 // PresentMon of events ("frames stuck on starting", issue #9). Stopping a session needs the same rights as PresentMon
 // (admin or Performance Log Users): every failure here is non-fatal and logged.
 // Copyright (c) 2026 Jared Brown. MIT licence.
@@ -15,7 +15,7 @@ public static class EtwSessions
 
     public static void Log(string msg) => Console.Error.WriteLine("SVSPerfMonitor: " + msg);
 
-    // the FSPerf_<pid> session names in `logman query -ets` output, with their pids
+    // the SVSPerf_<pid> session names in `logman query -ets` output, with their pids
     public static List<(string Name, int Pid)> Parse(string logmanOutput)
     {
         var r = new List<(string, int)>();

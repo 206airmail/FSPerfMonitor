@@ -16,10 +16,10 @@ $fails = 0
 function Check([bool]$ok, [string]$what) {
     if ($ok) { Write-Host "  ok   $what" } else { Write-Host "  FAIL $what" -ForegroundColor Red; $script:fails++ }
 }
-function Snap([int]$procId) {   # stderr = start-up notices (e.g. a stale session cleaned up); PS 5.1 + 'Stop' would throw on them even with 2>$null
-    $ErrorActionPreference = 'Continue'
-    & $exe --once --pid $procId --interval-ms 2000 --sample-hz 250 2>$null | ConvertFrom-Json
-}
+# runs the program for its JSON output. stderr = start-up notices (a stale session cleaned up, logman busy): ignored.
+# Windows PowerShell 5.1 with 'Stop' would throw on them even with 2>$null, so 'Continue' inside.
+function Json([string]$file, [object[]]$a) { $ErrorActionPreference = 'Continue'; & $file @a 2>$null | ConvertFrom-Json }
+function Snap([int]$procId) { Json $exe @('--once', '--pid', $procId, '--interval-ms', '2000', '--sample-hz', '250') }
 
 $b = Start-Process $exe -ArgumentList '--burn', '12' -PassThru -WindowStyle Hidden
 Start-Sleep -Milliseconds 700
@@ -29,7 +29,7 @@ Check ($j.verdict.label -eq 'CPU-bound') "verdict CPU-bound ($($j.verdict.reason
 Check ($j.mainThreadSamples -ge 300 -and $j.sampleHz -eq 250) "sampler rate: $($j.mainThreadSamples) samples in 2 s at 250 Hz (opt-in)"
 # the main-thread breakdown is opt-in (#2): by default and with --sample-hz 0 the game's thread is never suspended
 foreach ($a in @(@(), @('--sample-hz', '0'))) {
-    $j0 = & $exe --once --pid $b.Id --interval-ms 1000 --no-frames @a | ConvertFrom-Json
+    $j0 = Json $exe (@('--once', '--pid', $b.Id, '--interval-ms', '1000', '--no-frames') + $a)
     Check ($j0.attached -and $j0.sampleHz -eq 0 -and $j0.mainThreadSamples -eq 0 -and @($j0.mainThreadModules).Count -eq 0 -and -not $j0.note -and $j0.mainThreadBusyPct -ge 85) "breakdown off $(if ($a) { 'with --sample-hz 0' } else { 'by default' }): 0 samples, no note, CPU busy still measured"
 }
 $b.WaitForExit()
@@ -73,7 +73,7 @@ foreach ($c in @(@('SVSPerfMonitor', 'live'), @('svsperfmonitor', 'live'), @('SV
     Check ($r -eq $c[1]) "a live '$($c[0])' process -> its ETW session is $(if ($c[1] -eq 'live') { 'kept' } else { 'stale' })"
 }
 # without admin / Performance Log Users, full mode reports why and basic mode goes on
-$j = & $exe --once --pid $PID | ConvertFrom-Json
+$j = Json $exe @('--once', '--pid', $PID)
 # (a member of BUILTIN\Performance Log Users, SID S-1-5-32-559, may read the events without admin: PresentMon starts)
 $perfLogUser = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.SecurityIdentifier]'S-1-5-32-559')
@@ -212,10 +212,10 @@ if ($exe -like '*.com' -and (Test-Path $starter)) {
     $ex = & $exe --exit --instance $inst
     Check ($LASTEXITCODE -eq 0) "starter: the tray copy it started stops cleanly with --exit ('$ex')"
     # the command line through the starter: output and exit code pass through (piped, as scripts do)
-    $sj = & $starter --once --pid $PID --no-frames | ConvertFrom-Json
+    $sj = Json $starter @('--once', '--pid', $PID, '--no-frames')
     Check ($sj.attached -and $sj.pid -eq $PID) "starter: command line through SVSPerfMonitor.exe passes the output through"
     # a quoted value containing " --tray " is one argument, not the tray option (the starter parses quotes)
-    $sq = & $starter --once --pid $PID --no-frames --profile "$env:TEMP\x --tray y" | ConvertFrom-Json
+    $sq = Json $starter @('--once', '--pid', $PID, '--no-frames', '--profile', "$env:TEMP\x --tray y")
     Check ($sq.attached -and $sq.pid -eq $PID) "starter: --tray inside a quoted value is not the tray option"
     # a bare name finds the .com first (PATHEXT): what `SVSPerfMonitor` in a terminal runs
     Push-Location (Split-Path $exe)

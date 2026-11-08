@@ -83,17 +83,18 @@ public static unsafe class TrayApp
             AutoStart.ExitFilesInUse => "SVS Performance Monitor's protected copy is in use. Exit SVS Performance Monitor, start it again and save once more.",
             _ => "Windows could not change how SVS Performance Monitor starts. Nothing was changed.",
         };
-        // the Run entry always starts the user's own copy (the protected one goes when full permissions go)
-        string userCopy = AutoStart.RunsFromProtectedDir() && now.UserCopy.Length > 0 ? now.UserCopy : AutoStart.StarterPath();
+        // the Run entry always starts the user's own copy (the protected one goes when full permissions go), and the admin
+        // helper runs from it too: never from inside the protected folder it updates or removes
+        string userCopy = AutoStart.RunsFromProtectedDir() && now.UserCopy.Length > 0 && File.Exists(now.UserCopy) ? now.UserCopy : AutoStart.StarterPath();
         try {
             if (now.RunWithFullPermissions) {
                 // the task runs a protected copy in Program Files, made by the helper (see AutoStart: no UAC bypass)
-                int r = AutoStart.RunElevated($"--admin task-set {AutoStart.CurrentUserSid()} {(now.StartWithWindows ? 1 : 0)} {s_instance}");
+                int r = AutoStart.RunElevated($"--admin task-set {AutoStart.CurrentUserSid()} {(now.StartWithWindows ? 1 : 0)} {s_instance}", userCopy);
                 if (r != AutoStart.ExitOk) return Why(r);
                 AutoStart.SetRunEntry(s_instance, false);   // the task's logon trigger starts it now
             } else {
                 if (was.RunWithFullPermissions) {
-                    int r = AutoStart.RunElevated($"--admin task-delete {AutoStart.CurrentUserSid()} {s_instance}");
+                    int r = AutoStart.RunElevated($"--admin task-delete {AutoStart.CurrentUserSid()} {s_instance}", userCopy);
                     if (r != AutoStart.ExitOk) return Why(r);
                 }
                 AutoStart.SetRunEntry(s_instance, now.StartWithWindows, userCopy);

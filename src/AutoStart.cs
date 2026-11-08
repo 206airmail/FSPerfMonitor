@@ -154,10 +154,12 @@ public static unsafe class AutoStart
     public const int ExitOk = 0, ExitCancelled = 1223, ExitFailed = 1, ExitNotPublished = 2, ExitFilesInUse = 3;
 
     // runs this program elevated with `args` (a Windows prompt) and waits. ExitCancelled when the prompt was refused.
-    public static int RunElevated(string args)
+    // `starter`: which copy's helper to run (default: this one). The full-permissions copy passes the user's own copy, so
+    // the helper never runs from inside the protected folder it may have to remove.
+    public static int RunElevated(string args, string? starter = null)
     {
         var sei = new SHELLEXECUTEINFOW { cbSize = (uint)sizeof(SHELLEXECUTEINFOW), fMask = 0x40 /* SEE_MASK_NOCLOSEPROCESS */, nShow = 0 };
-        string file = StarterPath();   // published: the GUI starter, so no console window flashes (Windows 10 too)
+        string file = starter ?? StarterPath();   // published: the GUI starter, so no console window flashes (Windows 10 too)
         fixed (char* verb = "runas") fixed (char* f = file) fixed (char* a = args) {
             sei.lpVerb = verb; sei.lpFile = f; sei.lpParameters = a;
             if (!ShellExecuteExW(&sei)) return Marshal.GetLastWin32Error() == 1223 ? ExitCancelled : ExitFailed;
@@ -204,15 +206,26 @@ public static unsafe class AutoStart
                     string instance = ValidInstance(a[3]);
                     int r = Schtasks($"/Delete /TN \"{TaskName(instance, sid)}\" /F");
                     bool gone = r == 0 || Schtasks($"/Query /TN \"{TaskName(instance, sid)}\"") != 0;
-                    // the protected copy goes too (best effort: a copy still running there keeps its files until it exits)
+                    // the protected copy goes too. Files still in use (the full-permissions copy still runs, and its
+                    // PresentMon) are removed at the next restart instead (MoveFileEx delay-until-reboot), then their folders.
                     try {
                         string dir = ProtectedDir(instance, sid);
                         if (Directory.Exists(dir)) {
-                            foreach (var f in Directory.GetFiles(dir)) { try { File.Delete(f); } catch { } }
-                            try { Directory.Delete(dir); } catch { }
-                            // the now-empty product and studio folders too (never another user's)
-                            for (string? p = Path.GetDirectoryName(dir); p != null && p.Contains("SimVizion Studios"); p = Path.GetDirectoryName(p))
-                                if (Directory.Exists(p) && !Directory.EnumerateFileSystemEntries(p).Any()) Directory.Delete(p); else break;
+                            bool later = false;
+                            foreach (var f in Directory.GetFiles(dir)) {
+                                try { File.Delete(f); }
+                                catch { later = true; MoveFileExW(f, null, 4 /* MOVEFILE_DELAY_UNTIL_REBOOT */); }
+                            }
+                            var dirs = new List<string> { dir };
+                            for (string? p = Path.GetDirectoryName(dir); p != null && p.Contains("SimVizion Studios"); p = Path.GetDirectoryName(p)) dirs.Add(p);
+                            foreach (var d in dirs) {   // innermost first; never a folder that still holds another user's copy
+                                if (!Directory.Exists(d)) continue;
+                                bool empty = !Directory.EnumerateFileSystemEntries(d).Any();
+                                if (empty) { try { Directory.Delete(d); continue; } catch { } }
+                                if (later && (d == dir || Directory.EnumerateFileSystemEntries(d).All(e => string.Equals(e, dirs[dirs.IndexOf(d) - 1], StringComparison.OrdinalIgnoreCase))))
+                                    MoveFileExW(d, null, 4);   // after its files, at the restart (empty by then)
+                                else break;
+                            }
                         }
                     } catch { }
                     return gone ? ExitOk : ExitFailed;
@@ -268,4 +281,5 @@ public static unsafe class AutoStart
     private static extern uint NetLocalGroupGetMembers(string? server, string group, uint level, out IntPtr buf, int prefMax,
         out int read, out int total, ref nint resume);
     [DllImport("netapi32.dll")] private static extern uint NetApiBufferFree(IntPtr buf);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern bool MoveFileExW(string from, string? to, uint flags);
 }

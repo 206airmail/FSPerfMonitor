@@ -138,23 +138,38 @@ public static unsafe class AutoStart
         } catch { return -1; }
     }
 
-    // the addresses a phone at home can open: IPv4 of network adapters that are up and have a gateway (the real home
-    // network, not WSL / Hyper-V switches)
+    // the addresses a phone at home can open: IPv4 of real network adapters that are up (with or without a gateway: a
+    // static home network may have none), never virtual switches (WSL, Hyper-V, VirtualBox, VMware). Adapters with a
+    // gateway first: that is usually the network the phone is on.
+    private static readonly System.Text.RegularExpressions.Regex Virtual =
+        new(@"Hyper-V|vEthernet|WSL|VirtualBox|VMware|Loopback|Bluetooth", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
     public static List<string> HomeNetworkAddresses()
     {
-        var list = new List<string>();
+        var withGw = new List<string>(); var without = new List<string>();
         try {
             foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()) {
                 if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                if (ni.NetworkInterfaceType is System.Net.NetworkInformation.NetworkInterfaceType.Loopback or System.Net.NetworkInformation.NetworkInterfaceType.Tunnel) continue;
+                if (Virtual.IsMatch(ni.Name) || Virtual.IsMatch(ni.Description)) continue;
                 var ip = ni.GetIPProperties();
-                if (!ip.GatewayAddresses.Any(g => g.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !g.Address.Equals(System.Net.IPAddress.Any))) continue;
+                bool gw = ip.GatewayAddresses.Any(g => g.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !g.Address.Equals(System.Net.IPAddress.Any));
                 foreach (var ua in ip.UnicastAddresses)
                     if (ua.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !System.Net.IPAddress.IsLoopback(ua.Address)
                         && !ua.Address.ToString().StartsWith("169.254.", StringComparison.Ordinal))
-                        list.Add(ua.Address.ToString());
+                        (gw ? withGw : without).Add(ua.Address.ToString());
             }
         } catch { }
-        return list;
+        return [.. withGw, .. without];
+    }
+
+    // is `port` free for the dashboard? Checked before any Windows change for a new port. From the system's list of
+    // listening sockets, never by listening ourselves: listening on all interfaces would make Windows Firewall ask.
+    public static bool PortFree(int port)
+    {
+        try {
+            return !System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(e => e.Port == port);
+        } catch { return true; }   // can't tell: the start itself will say
     }
 
     // ---- frame times: Performance Log Users ----

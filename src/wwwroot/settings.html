@@ -163,7 +163,13 @@ $("settings-form").onsubmit = async e => {
     if (!r.ok) {
       if (r.status === 403) { notice("Settings were not saved", body + " Reload this page and try again."); return; }
       // a Windows step (permission prompt, start-up, firewall): a notice, and show what was saved after all
-      if (r.status === 422 && /Windows|permission|protected copy/i.test(body)) { notice("Not everything was changed", body); await load(); return; }
+      if (r.status === 422 && /Windows|permission|protected copy/i.test(body)) {
+        // part of it may have been saved and may restart the dashboard (new token): wait, reload, then keep the message
+        await waitFor("http://" + location.hostname + ":" + view.settings.port + "/");
+        await load();
+        notice("Not everything was changed", body);
+        return;
+      }
       if (r.status === 422 && /folder/i.test(body)) fieldError("profile", body);
       else if (r.status === 422) fieldError("port", body);
       else notice("Settings were not saved", body);

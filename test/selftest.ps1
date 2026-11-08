@@ -155,6 +155,9 @@ $sn = $null; for ($i = 0; $i -lt 12 -and -not ($sn -and $sn.sampleHz -eq 250); $
 $saved = Get-Content $sf -Raw | ConvertFrom-Json
 Check ($saved.mainLoopBreakdown -eq $true -and $sn.sampleHz -eq 250) "settings: saved to the file and applied after the restart (breakdown on: $($sn.sampleHz) Hz)"
 $body2 = '{"version":1,"port":8794,"openDashboardOnStart":false,"mainLoopBreakdown":false,"profileFolder":""}'
+# a port another program listens on is refused before anything changes (#9: the firewall rule would follow it)
+$busy = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, 8793); $busy.Start()
+try { Check ((Post "$good/api/settings" $body2.Replace('8794', '8793') $good) -eq 422) "settings: a port another program uses is refused" } finally { $busy.Stop() }
 Check ((Post "$good/api/settings" $body2 $good) -eq 200) "settings: a new port is accepted"
 $v2 = WaitUp 8794
 $old = try { $null = Invoke-WebRequest "$good/" -UseBasicParsing -TimeoutSec 2; 'open' } catch { 'closed' }

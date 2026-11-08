@@ -50,6 +50,9 @@ public static unsafe class TrayApp
                 AppSettings was;
                 lock (s_settingsLock) was = s_settings.Clone();
                 s.UserCopy = was.UserCopy;   // never from the page: it decides what Windows starts
+                // a new port must be free BEFORE anything changes in Windows (the firewall rule would follow it)
+                if (s.Port != was.Port && !AutoStart.PortFree(s.Port))
+                    return $"Port {s.Port} is already used by another program. Choose another.";
                 problem = ApplyStartup(was, s);   // may show a Windows permission prompt and wait for it
                 if (problem != null) return problem;
                 // the firewall next: refused or failed = the network part keeps its old values, the rest (incl. the start-up
@@ -387,11 +390,17 @@ public static unsafe class TrayApp
             s_host = new MonitorHost(CurrentOptions(), s_backend);
         } catch (System.Net.Sockets.SocketException) {
             int wanted;
+            AppSettings back;
             lock (s_settingsLock) {
                 wanted = s_settings.Port;
-                var back = s_settings.Clone(); back.Port = oldPort;
+                back = s_settings.Clone(); back.Port = oldPort;
                 try { SettingsStore.Save(back); } catch { }
                 s_settings = back;
+            }
+            // taken between the check and now (rare): the firewall rule goes back to the old port too
+            if (back.HomeNetwork && wanted != oldPort) {
+                if (!AutoStart.FirewallRuleExists(oldPort)) AutoStart.Admin($"firewall-add {oldPort}");
+                if (AutoStart.FirewallRuleExists(wanted)) AutoStart.Admin($"firewall-delete {wanted}");
             }
             TrayNative.MessageBoxW(IntPtr.Zero, $"Port {wanted} is already used by another program, so the dashboard stays on port {oldPort}.",
                 Title, TrayNative.MB_ICONWARNING);

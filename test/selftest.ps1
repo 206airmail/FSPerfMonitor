@@ -14,7 +14,7 @@ $fails = 0
 function Check([bool]$ok, [string]$what) {
     if ($ok) { Write-Host "  ok   $what" } else { Write-Host "  FAIL $what" -ForegroundColor Red; $script:fails++ }
 }
-function Snap([int]$procId) { & $exe --once --pid $procId --interval-ms 2000 --sample-hz 250 | ConvertFrom-Json }
+function Snap([int]$procId) { & $exe --once --pid $procId --interval-ms 2000 --sample-hz 250 2>$null | ConvertFrom-Json }   # (stderr: start-up notices, e.g. a stale session cleaned up)
 
 $b = Start-Process $exe -ArgumentList '--burn', '12' -PassThru -WindowStyle Hidden
 Start-Sleep -Milliseconds 700
@@ -63,7 +63,7 @@ $stale2 = @($logman2 | & $exe --stale-sessions 222)
 Check (($stale2 -join ',') -eq 'SVSPerf_111') "stale sessions: dead monitor's session stopped, live one and foreign ones kept ($($stale2 -join ','))"
 Check ($stale.Count -eq 0) "stale sessions: only lines that start with SVSPerf_<digits> count ($($stale -join ','))"
 # the unprivileged cleanup on this machine must not crash the monitor (errors are logged, not fatal)
-foreach ($c in @(@('SVSPerfMonitor', 'live'), @('svsperfmonitor', 'live'), @('dotnet', 'live'), @('fsperf', 'other'), @('notepad', 'other'))) {
+foreach ($c in @(@('SVSPerfMonitor', 'live'), @('svsperfmonitor', 'live'), @('SVSPerfMonitor.com', 'live'), @('dotnet', 'live'), @('fsperf', 'other'), @('notepad', 'other'))) {
     $r = & $exe --is-fsperf-name $c[0]
     Check ($r -eq $c[1]) "a live '$($c[0])' process -> its ETW session is $(if ($c[1] -eq 'live') { 'kept' } else { 'stale' })"
 }
@@ -154,8 +154,43 @@ Check ((Post "$good/api/settings" $body2 $good) -eq 200) "settings: a new port i
 $v2 = WaitUp 8794
 $old = try { $null = Invoke-WebRequest "$good/" -UseBasicParsing -TimeoutSec 2; 'open' } catch { 'closed' }
 Check ($v2 -and $v2.settings.port -eq 8794 -and $old -eq 'closed') "settings: the dashboard moved to the new port (old one $old)"
+# 0.4 start-up (#7) without a Windows permission prompt: start with Windows = a Run entry under the test's own name
+$script:tok = (WaitUp 8794).token
+$runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+try {
+    $b3 = '{"version":1,"port":8794,"openDashboardOnStart":false,"mainLoopBreakdown":false,"profileFolder":"","startWithWindows":true}'
+    $ok3 = (Post 'http://127.0.0.1:8794/api/settings' $b3 'http://127.0.0.1:8794') -eq 200
+    $entry = (Get-ItemProperty $runKey -Name $inst -ErrorAction SilentlyContinue).$inst
+    Check ($ok3 -and $entry -match '--tray --autostart' -and $entry -match [regex]::Escape("--instance $inst")) "start with Windows: on = a Run entry that starts the tray app quietly ($entry)"
+    $script:tok = (WaitUp 8794).token
+    $b4 = $b3.Replace('"startWithWindows":true', '"startWithWindows":false')
+    $ok4 = (Post 'http://127.0.0.1:8794/api/settings' $b4 'http://127.0.0.1:8794') -eq 200
+    Check ($ok4 -and $null -eq (Get-ItemProperty $runKey -Name $inst -ErrorAction SilentlyContinue)) "start with Windows: off = the Run entry is gone"
+} finally {
+    Remove-ItemProperty $runKey -Name $inst -ErrorAction SilentlyContinue   # never leave a test entry behind
+}
+$v5 = WaitUp 8794
+Check ($v5.frameTimes -in @('ready', 'signout', 'setup', 'missing')) "settings: the page learns the frame-times state ($($v5.frameTimes))"
 $null = & $exe --exit --instance $inst
 Check ($LASTEXITCODE -eq 0 -and $st.WaitForExit(15000)) "settings: the tray app still exits cleanly"
+
+# frame times: the state matches this login (Performance Log Users in the token, or elevated = ready)
+$fa = & $exe --frametimes-access
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+Check (($fa -eq 'ready') -eq ($perfLogUser -or $isAdmin)) "frame times: '$fa' matches this login (in the group: $perfLogUser, elevated: $isAdmin)"
+# full permissions: the task definition is valid for Windows' Task Scheduler (parsed, never registered)
+foreach ($logon in '1', '0') {
+    $xml = (& $exe --task-xml $logon SVSPerfSelfTest) -join "`n"
+    $parsed = $false; $runLevel = -1; $triggers = -1
+    try {
+        $svc = New-Object -ComObject Schedule.Service; $svc.Connect()
+        $def = $svc.NewTask(0); $def.XmlText = $xml
+        $parsed = $true; $runLevel = $def.Principal.RunLevel; $triggers = $def.Triggers.Count
+    } catch { $err = $_.Exception.Message }
+    Check ($parsed -and $runLevel -eq 1 -and $triggers -eq [int]$logon) "full permissions: the task definition is valid (logon trigger $logon, highest run level) $err"
+}
+# the admin helper refuses to work without admin rights (it never prompts by itself)
+if (-not $isAdmin) { $null = & $exe --admin task-delete SVSPerfSelfTest; Check ($LASTEXITCODE -eq 1) "the admin helper refuses without admin rights" }
 Remove-Item $sf -ErrorAction SilentlyContinue
 
 # the published pair (-Exe publish\SVSPerfMonitor.com): the starter SVSPerfMonitor.exe next to it

@@ -42,17 +42,61 @@ public static unsafe class TrayApp
             s = s.Clone().Normalized();
             string? problem = SettingsStore.Validate(s);
             if (problem != null) return problem;
-            lock (s_settingsLock) {   // file and memory change together, one save at a time
+            lock (s_settingsLock) {   // file, Windows' start-up and memory change together, one save at a time
+                problem = ApplyStartup(s_settings, s);   // may show a Windows permission prompt and wait for it
+                if (problem != null) return problem;
                 try { SettingsStore.Save(s); } catch (Exception e) { return "Could not save the settings: " + e.Message; }
                 s_settings = s;
             }
             return null;
+        }
+
+        public string SetupFrameTimes()
+        {
+            if (AutoStart.FrameTimesAccess() == "ready") return "ready";
+            int r = AutoStart.RunElevated($"--admin perflog {AutoStart.CurrentUserSid()}");
+            return r == AutoStart.ExitOk ? AutoStart.FrameTimesAccess() : r == AutoStart.ExitCancelled ? "cancelled" : "failure";
         }
         public void Saved() => TrayNative.PostMessageW(s_hwnd, WM_SETTINGS_SAVED, IntPtr.Zero, IntPtr.Zero);
     }
 
     // the options for this run: the settings file, then the tray app's own command line (e.g. --lan) on top
     private static Options CurrentOptions() { lock (s_settingsLock) return SettingsStore.ToOptions(s_settings.Clone(), s_args); }
+    private static string s_instance = "SVSPerfMonitor";
+
+    // "start with Windows" / "full permissions" changed: the Run entry and the scheduled task follow. The task needs a
+    // Windows permission prompt (create, change its logon trigger, remove); refused = nothing changes.
+    private static string? ApplyStartup(AppSettings was, AppSettings now)
+    {
+        if (was.StartWithWindows == now.StartWithWindows && was.RunWithFullPermissions == now.RunWithFullPermissions) return null;
+        const string refused = "Windows' permission was not given, so nothing was changed.";
+        const string failed = "Windows could not change how SVS Performance Monitor starts. Nothing was changed.";
+        try {
+            if (now.RunWithFullPermissions) {
+                int r = AutoStart.RunElevated($"--admin task-set {AutoStart.CurrentUserSid()} {(now.StartWithWindows ? 1 : 0)} {s_instance}");
+                if (r != AutoStart.ExitOk) return r == AutoStart.ExitCancelled ? refused : failed;
+                AutoStart.SetRunEntry(s_instance, false);   // the task's logon trigger starts it now
+            } else {
+                if (was.RunWithFullPermissions) {
+                    int r = AutoStart.RunElevated($"--admin task-delete {s_instance}");
+                    if (r != AutoStart.ExitOk) return r == AutoStart.ExitCancelled ? refused : failed;
+                }
+                AutoStart.SetRunEntry(s_instance, now.StartWithWindows);
+            }
+        } catch (Exception e) { return "Could not change how SVS Performance Monitor starts: " + e.Message; }
+        return null;
+    }
+
+    // waits until the dashboard on `port` accepts connections (a copy that is starting): true when it does in time
+    private static bool WaitForPort(int port, int ms)
+    {
+        var until = DateTime.UtcNow.AddMilliseconds(ms);
+        while (DateTime.UtcNow < until) {
+            try { using var t = new System.Net.Sockets.TcpClient(); if (t.ConnectAsync("127.0.0.1", port).Wait(500) && t.Connected) return true; } catch { }
+            Thread.Sleep(250);
+        }
+        return false;
+    }
 
     public static int Run(string[] args)
     {
@@ -66,12 +110,38 @@ public static unsafe class TrayApp
             TrayNative.MessageBoxW(IntPtr.Zero, e.Message, Title, TrayNative.MB_ICONWARNING);
             return 2;
         }
-        using var mutex = new Mutex(true, MutexName(o.Instance), out bool first);
-        if (!first) {   // already running: let that copy open its dashboard (it knows its port and runs as the right user);
-                        // --no-browser (e.g. the start with Windows) only makes sure it runs
-            // (only an explicit --no-browser: the "open on start" setting is about starting, not about a second double-click)
-            if (!args.Contains("--no-browser") && EventWaitHandle.TryOpenExisting(OpenEventName(o.Instance), out var open)) using (open) open.Set();
+        s_instance = o.Instance;
+        // a second start opens the dashboard (only an explicit --no-browser / --autostart just makes sure it runs: the
+        // "open on start" setting is about starting, not about a second double-click)
+        bool openOnSecondStart = !args.Contains("--no-browser") && !args.Contains("--autostart");
+        string settingsUrl = $"http://127.0.0.1:{o.Port}/";
+        Mutex mutex;
+        bool first;
+        try { mutex = new Mutex(true, MutexName(o.Instance), out first); }
+        catch (UnauthorizedAccessException) {   // the running copy has full permissions: its objects are out of our reach
+            if (openOnSecondStart) OpenUrl(settingsUrl);
             return 0;
+        }
+        using var mutexScope = mutex;
+        if (!first && args.Contains("--handover")) {   // the copy we take over from is quitting: wait for it
+            try { first = mutex.WaitOne(15000); } catch (AbandonedMutexException) { first = true; }
+        }
+        if (!first) {   // already running: let that copy open its dashboard (it knows its port and runs as the right user)
+            bool asked = false;
+            try {
+                if (openOnSecondStart && EventWaitHandle.TryOpenExisting(OpenEventName(o.Instance), out var open)) using (open) asked = open.Set();
+            } catch (UnauthorizedAccessException) { }
+            if (openOnSecondStart && !asked) OpenUrl(settingsUrl);
+            return 0;
+        }
+        // full permissions: the scheduled task starts the elevated copy (no prompt); this one only opens the browser
+        if (s_settings.RunWithFullPermissions && !AutoStart.IsElevated() && !args.Contains("--handover")) {
+            if (AutoStart.RunTask(o.Instance)) {
+                mutex.ReleaseMutex();   // the elevated copy (--handover) waits for it
+                if (!o.NoBrowser && WaitForPort(o.Port, 15000)) OpenUrl(settingsUrl);
+                return 0;
+            }
+            // no task (removed by hand?): run normally, without full permissions
         }
         try {
             try { s_host = new MonitorHost(o, s_backend); }
@@ -127,7 +197,9 @@ public static unsafe class TrayApp
     // `SVSPerfMonitor --exit`: asks the running tray copy to quit cleanly, waits until it has. 0 = it quit, 1 = none ran.
     public static int SignalExit(string instance, int timeoutMs = 15000)
     {
-        if (!EventWaitHandle.TryOpenExisting(ExitEventName(instance), out var evt)) return 1;
+        EventWaitHandle? evt;
+        try { if (!EventWaitHandle.TryOpenExisting(ExitEventName(instance), out evt)) return 1; }
+        catch (UnauthorizedAccessException) { return 3; }   // it runs with full permissions: run --exit as admin, or use the menu
         using (evt) evt.Set();
         if (!Mutex.TryOpenExisting(MutexName(instance), out var m)) return 0;
         using (m) {
@@ -169,6 +241,10 @@ public static unsafe class TrayApp
             s_hwnd = TrayNative.CreateWindowExW(0, cls, cls, 0, 0, 0, 0, 0, IntPtr.Zero, IntPtr.Zero, inst, IntPtr.Zero);
         }
         fixed (char* tc = "TaskbarCreated") s_taskbarCreated = TrayNative.RegisterWindowMessageW(tc);
+        // elevated (full permissions): Windows drops messages from Explorer (normal level) to our window unless allowed,
+        // and the icon would stop answering clicks
+        TrayNative.ChangeWindowMessageFilterEx(s_hwnd, WM_TRAY, 1 /* MSGFLT_ALLOW */, IntPtr.Zero);
+        if (s_taskbarCreated != 0) TrayNative.ChangeWindowMessageFilterEx(s_hwnd, s_taskbarCreated, 1, IntPtr.Zero);
         return s_hwnd != IntPtr.Zero;
     }
 
@@ -221,6 +297,13 @@ public static unsafe class TrayApp
     // back to the previous settings, and say so.
     private static void RestartMonitor()
     {
+        // full permissions just turned on: hand over to the elevated copy the task starts (it waits for our exit)
+        bool full; lock (s_settingsLock) full = s_settings.RunWithFullPermissions;
+        if (full && !AutoStart.IsElevated()) {
+            if (AutoStart.RunTask(s_instance)) { TrayNative.DestroyWindow(s_hwnd); return; }
+            TrayNative.MessageBoxW(IntPtr.Zero, "SVS Performance Monitor could not restart with full permissions. It keeps running without them.",
+                Title, TrayNative.MB_ICONWARNING);
+        }
         var old = s_host;
         int oldPort = old != null ? new Uri(old.Url).Port : s_settings.Port;
         s_host = null;
@@ -450,6 +533,7 @@ internal static unsafe class TrayNative
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetModuleHandleW(string? name);
 
     [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+    [DllImport("user32.dll")] public static extern bool ChangeWindowMessageFilterEx(IntPtr hwnd, uint msg, uint action, IntPtr info);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct STARTUPINFOW

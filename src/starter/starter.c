@@ -85,13 +85,15 @@ void Start(void)
         CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
         ExitProcess(0);
     }
-    // the command line: share the caller's console (or its redirected output) and pass the exit code through
-    AttachConsole(ATTACH_PARENT_PROCESS);
+    // the command line: share the caller's console (or its redirected output) and pass the exit code through. Started
+    // without a console (Explorer, a shortcut, an admin prompt for a settings change, a script's pipes): no window at all;
+    // redirected output still arrives through the handles below
+    BOOL console = AttachConsole(ATTACH_PARENT_PROCESS);
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
     si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
     si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
-    if (!CreateProcessW(exe, cmd, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) ExitProcess(5);
+    if (!CreateProcessW(exe, cmd, NULL, NULL, TRUE, console ? 0 : CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) ExitProcess(5);
     CloseHandle(pi.hThread);
     WaitForSingleObject(pi.hProcess, INFINITE);
     DWORD code = 1; GetExitCodeProcess(pi.hProcess, &code);

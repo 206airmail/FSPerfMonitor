@@ -3,3 +3,4 @@ src/obj/
 publish/
 # downloaded by build.ps1 -FetchPresentMon (not ours to commit)
 tools/PresentMon-*.exe
+publish_test/

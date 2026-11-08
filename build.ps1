@@ -5,11 +5,12 @@
 #               SVSPerfMonitor.com  the program (NativeAOT, ~8 MB); `SVSPerfMonitor` in a terminal finds the .com first
 #               PresentMon-<ver>-x64.exe  when tools\ has it (frame times)
 #   -FetchPresentMon  downloads Intel's PresentMon console (MIT, signed by Intel) to tools\ for full mode; pinned + hash-checked
-param([switch]$Publish, [switch]$FetchPresentMon)
+#   -Out <dir>  publish there instead of publish\ (e.g. while a copy from publish\ is running; publish_test\ is ignored by git)
+param([switch]$Publish, [switch]$FetchPresentMon, [string]$Out)
 $ErrorActionPreference = 'Stop'
 $env:DOTNET_NOLOGO = '1'   # the SDK's first-run notice goes to stderr, which this script would treat as an error
 $src = Join-Path $PSScriptRoot 'src\FSPerf.csproj'
-$pub = Join-Path $PSScriptRoot 'publish'
+$pub = if ($Out) { [IO.Path]::GetFullPath((Join-Path $PSScriptRoot $Out)) } else { Join-Path $PSScriptRoot 'publish' }
 $pmVersion = '2.6.0'
 $pmSha256 = 'B2A706BC6AD475749E3B7E3409263AA1E6906D45BDCF993F6DBC0F660188F1AF'
 $pmFile = Join-Path $PSScriptRoot "tools\PresentMon-$pmVersion-x64.exe"

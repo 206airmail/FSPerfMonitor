@@ -11,6 +11,8 @@ public sealed class AppSettings
     public bool MainLoopBreakdown { get; set; }            // main-thread sampling (pauses the game; off by default, #2)
     public string ProfileFolder { get; set; } = "";        // "" = found automatically
     public int Port { get; set; } = 8765;
+    public bool StartWithWindows { get; set; }              // #7: Run entry, or the task's logon trigger with full permissions
+    public bool RunWithFullPermissions { get; set; }        // #7: the scheduled task (highest privileges)
 
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 
@@ -23,8 +25,9 @@ public sealed class AppSettings
 }
 
 // what GET /api/settings returns: the settings, whether this viewer may change them, and the facts the page shows
+// FrameTimes: "ready" | "signout" (in the group, sign out and back in) | "setup" (not set up) | "missing" (no PresentMon)
 public sealed record SettingsView(AppSettings Settings, bool CanEdit, string ReadOnlyReason, string DefaultProfileFolder,
-    string Version, string Url, string Token);
+    string Version, string Url, string Token, string FrameTimes, bool Elevated);
 
 public static class SettingsStore
 {
@@ -83,6 +86,8 @@ public static class SettingsStore
             ProfileDir = s.ProfileFolder.Length > 0 ? s.ProfileFolder : DefaultProfileFolder,
             NoBrowser = !s.OpenDashboardOnStart,
         };
+        // a start by Windows (logon) or a hand-over to the full-permissions copy never opens the browser
+        if (args.Contains("--autostart")) o.NoBrowser = true;
         return Options.Parse(args, o);
     }
 }

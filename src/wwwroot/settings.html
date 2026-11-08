@@ -12,17 +12,17 @@
 <div id="settings-notice" role="status" class="banner" hidden></div>
 <form id="settings-form" class="stack" novalidate>
 <section class="card"><h2>General</h2>
-<div class="setting"><div><div class="setting-title">Start SVS Performance Monitor when Windows starts</div><p>Keep it ready when you want to play.</p></div><div class="actions"><span class="tag">Next update</span><label class="check-target" title="Start SVS Performance Monitor when Windows starts"><input id="startup" type="checkbox" aria-label="Start SVS Performance Monitor when Windows starts" disabled></label></div></div>
+<div class="setting"><div><div class="setting-title">Start SVS Performance Monitor when Windows starts</div><p>Keep it ready when you want to play. It starts in the notification area, without opening the dashboard.</p></div><label class="check-target" title="Start SVS Performance Monitor when Windows starts"><input id="startup" type="checkbox" aria-label="Start SVS Performance Monitor when Windows starts"></label></div>
 <div class="setting"><div><div class="setting-title">Open the dashboard when SVS Performance Monitor starts</div><p>Open it in your usual browser.</p></div><label class="check-target" title="Open the dashboard when SVS Performance Monitor starts"><input id="open-browser" type="checkbox" aria-label="Open the dashboard when SVS Performance Monitor starts"></label></div>
 </section>
 <section class="card" id="frame-times"><h2>Frame times</h2>
-<div class="setting"><div><div class="setting-title">Show frame times (FPS and stutter)</div><p>Windows will ask for permission once, then sign out and back in. After that, SVS Performance Monitor can show FPS without full permissions.</p></div><div class="actions"><span class="tag">Next update</span><button type="button" class="primary" id="setup" disabled>Set up</button></div></div>
+<div class="setting"><div><div class="setting-title">Show frame times (FPS and stutter)</div><p>Windows will ask for permission once, then sign out and back in. After that, SVS Performance Monitor can show FPS without full permissions.</p></div><div class="actions"><span class="tag" id="setup-status">Checking…</span><button type="button" class="primary" id="setup" hidden>Set up</button></div></div>
 </section>
 <section class="card"><h2>Phone and home network</h2>
 <div class="setting"><div><div class="setting-title">Let my phone or other computers at home open the dashboard</div><p>They can also see your game log, which shows your Windows user name and mod list. Use a trusted private home network. Windows will ask once.</p></div><div class="actions"><span class="tag">Next update</span><label class="check-target" title="Let my phone or other computers at home open the dashboard"><input id="lan" type="checkbox" aria-label="Let my phone or other computers at home open the dashboard" disabled></label></div></div>
 </section>
 <section class="card"><h2>Advanced</h2>
-<div class="setting"><div><div class="setting-title">Run with full permissions</div><p>Only needed for the detailed mod breakdown. Windows asks once.</p></div><div class="actions"><span class="tag">Next update</span><label class="check-target" title="Run with full permissions"><input id="elevated" type="checkbox" aria-label="Run with full permissions" disabled></label></div></div>
+<div class="setting"><div><div class="setting-title">Run with full permissions</div><p>Shows frame times without the setup above, and is needed for the detailed mod breakdown (coming later). Windows asks once when you turn it on or off.</p></div><label class="check-target" title="Run with full permissions"><input id="elevated" type="checkbox" aria-label="Run with full permissions"></label></div>
 <div class="setting"><div><div class="setting-title">Show what the game’s main loop spends time on</div><p>Briefly pauses the game hundreds of times a second; it slows the game a little (a few percent). Leave off for timing-sensitive comparisons, or keep it the same for both runs.</p></div><label class="check-target" title="Show what the game’s main loop spends time on"><input id="sampling-enabled" type="checkbox" aria-label="Show what the game’s main loop spends time on"></label></div>
 <div class="field"><label for="profile">Farming Simulator settings folder</label><input id="profile" type="text" spellcheck="false" aria-describedby="profile-help profile-error"><span id="profile-help" class="meta">Found automatically. Change only if you use a different folder.</span><span id="profile-error" class="field-error" hidden></span></div>
 <div class="field"><label for="port">Port</label><input id="port" type="number" min="1" max="65535" aria-describedby="port-help port-error"><span id="port-help" class="meta">The dashboard’s address on this PC. Saving restarts SVS Performance Monitor’s dashboard on the new address.</span><span id="port-error" class="field-error" hidden>⚠ Enter a whole number from 1 to 65535.</span></div>
@@ -53,20 +53,52 @@ function show(v) {
   view = v;
   const s = v.settings;
   $("open-browser").checked = s.openDashboardOnStart;
+  $("startup").checked = s.startWithWindows;
+  $("elevated").checked = s.runWithFullPermissions;
   $("sampling-enabled").checked = s.mainLoopBreakdown;
   $("profile").value = s.profileFolder || v.defaultProfileFolder;
   $("port").value = s.port;
   $("version").textContent = v.version;
   const ro = !v.canEdit;
   $("settings-origin").textContent = ro ? "Read-only" : "This PC";
-  for (const id of ["open-browser", "sampling-enabled", "profile", "port"]) {
+  for (const id of ["startup", "elevated", "open-browser", "sampling-enabled", "profile", "port"]) {
     const el = $(id);
     if (el.type === "checkbox") el.disabled = ro; else el.readOnly = ro;
   }
   $("save").hidden = ro;
   $("save-note").textContent = ro ? "Viewing settings from another device." : "Changes are saved on this PC.";
   notice(ro ? "Settings can be changed on the PC running SVS Performance Monitor" : "", v.readOnlyReason);
+  frameTimes(v.frameTimes, !ro);
 }
+
+// frame times: the status tag, the Set up button and, for the in-between states, a message (wording: design/UI_SPEC.md)
+const FRAME_STATES = {
+  ready: ["Ready", "", ""],
+  setup: ["Not set up", "", ""],
+  signout: ["Sign out needed", "One more step", "Sign out of Windows and back in to finish setting up frame times."],
+  cancelled: ["Not set up", "Permission was cancelled", "No changes were made. You can try Set up again when you are ready."],
+  failure: ["Not set up", "Frame times could not be set up", "Try again on the PC running SVS Performance Monitor."],
+  missing: ["Missing file", "Frame times need a missing file", "The frame-times tool is missing. Check the files that came with SVS Performance Monitor."],
+};
+function frameTimes(state, canEdit) {
+  const f = FRAME_STATES[state] || FRAME_STATES.setup;
+  $("setup-status").textContent = f[0];
+  $("setup").hidden = !canEdit || !(state === "setup" || state === "cancelled" || state === "failure");
+  if (f[1] && canEdit) notice(f[1], f[2]);   // a phone keeps its read-only notice
+}
+$("setup").onclick = async () => {
+  if (!view || !view.canEdit) return;
+  $("setup").disabled = true;
+  toast("Windows will ask for permission…");
+  try {
+    const r = await fetch("/api/frametimes-setup", { method: "POST", headers: { "Content-Type": "application/json", "X-SVS-Token": view.token }, body: "{}" });
+    const state = await r.json();
+    notice("", "");
+    frameTimes(r.ok ? state : "failure", true);
+    $("toast").hidden = true;
+  } catch { frameTimes("failure", true); }
+  finally { $("setup").disabled = false; }
+};
 
 function fieldError(id, msg) {
   const e = $(id + "-error");
@@ -110,6 +142,8 @@ $("settings-form").onsubmit = async e => {
   if (!okPort) { $("port").focus(); return; }
   const profile = $("profile").value.trim();
   const s = Object.assign({}, view.settings, {
+    startWithWindows: $("startup").checked,
+    runWithFullPermissions: $("elevated").checked,
     openDashboardOnStart: $("open-browser").checked,
     mainLoopBreakdown: $("sampling-enabled").checked,
     profileFolder: profile === view.defaultProfileFolder ? "" : profile,

@@ -77,6 +77,8 @@ public sealed class FrameMonitor : IDisposable
         return id.Groups?.Any(g => g.Value == "S-1-5-32-559") ?? false;
     }
 
+    public static bool PresentMonAvailable(string? explicitPath) => Locate(explicitPath) != null;
+
     private static string? Locate(string? explicitPath)
     {
         if (!string.IsNullOrEmpty(explicitPath)) return File.Exists(explicitPath) ? Path.GetFullPath(explicitPath) : null;

@@ -40,9 +40,14 @@ public static class EtwSessions
 
     // conservative: SVSPerfMonitor.exe, our own program name, or dotnet (`dotnet SVSPerfMonitor.dll`) all count as live -
     // a session is stopped only when its pid is gone or clearly some other program
+    // (the published program is SVSPerfMonitor.com: Windows reports that name WITH ".com", unlike ".exe" - a copy running
+    // from publish\ once lost its session to a development build's start-up cleanup because of that)
     public static bool IsFsperfProcessName(string name, string ownName)
-        => name.Equals(ownName, StringComparison.OrdinalIgnoreCase) || name.Equals("SVSPerfMonitor", StringComparison.OrdinalIgnoreCase)
+        => Base(name).Equals(Base(ownName), StringComparison.OrdinalIgnoreCase) || Base(name).Equals("SVSPerfMonitor", StringComparison.OrdinalIgnoreCase)
            || name.Equals("dotnet", StringComparison.OrdinalIgnoreCase);
+
+    private static string Base(string name) =>
+        name.EndsWith(".com", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
 
     private static (int Code, string Out) Logman(string args)
     {

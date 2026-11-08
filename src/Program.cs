@@ -57,6 +57,8 @@ public sealed class Options
                 case "--instance": o.Instance = Next(); break;
                 case "--tray-child": break;   // internal marker (Main)
                 case "--settings": o.SettingsFile = Next(); break;
+                case "--autostart": o.NoBrowser = true; break;   // started by Windows / handed over: no browser
+                case "--handover": break;                        // internal: wait for the copy that hands over (Tray)
                 default: throw new ArgumentException($"unknown option {a[i]}");
             }
         }
@@ -97,11 +99,17 @@ public static class Program
             return 0;
         }
         if (args.Length == 1 && args[0] == "--logtail-selftest") return LogTailSelfTest.Run();   // self-test helper
+        if (args.Length >= 2 && args[0] == "--admin") return AutoStart.AdminMain(args);   // the elevated helper (#7)
+        if (args.Length == 3 && args[0] == "--task-xml") {   // self-test helper: the scheduled task's definition
+            Console.WriteLine(AutoStart.TaskXml(AutoStart.CurrentUserSid(), AutoStart.StarterPath(), args[1] == "1", args[2]));
+            return 0;
+        }
+        if (args.Length == 1 && args[0] == "--frametimes-access") { Console.WriteLine(AutoStart.FrameTimesAccess()); return 0; }   // self-test helper
         Options o;
         try { o = Options.Parse(args); } catch (Exception e) { Console.Error.WriteLine($"SVSPerfMonitor: {e.Message}"); return 2; }
         if (o.Exit) {
             int r = TrayApp.SignalExit(o.Instance);
-            Console.WriteLine(r == 0 ? "SVS Performance Monitor: stopped" : r == 1 ? "SVS Performance Monitor: not running" : "SVS Performance Monitor: did not stop in time");
+            Console.WriteLine(r == 0 ? "SVS Performance Monitor: stopped" : r == 1 ? "SVS Performance Monitor: not running" : r == 3 ? "SVS Performance Monitor runs with full permissions: use Exit in its tray menu, or run this as admin" : "SVS Performance Monitor: did not stop in time");
             return r;
         }
         if (tray) return TrayApp.Run(args);   // its options: the settings file, then this command line

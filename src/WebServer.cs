@@ -15,6 +15,7 @@ public interface ISettingsBackend
     AppSettings Current { get; }
     string? Save(AppSettings s);   // null = saved; else the message to show
     void Saved();                  // called after the answer went out: apply them
+    string SetupFrameTimes();      // the frame-times state after the setup: ready / signout / cancelled / failure
 }
 
 public sealed class WebServer : IDisposable
@@ -100,8 +101,8 @@ public sealed class WebServer : IDisposable
             if (!HostAllowed(hostHeader)) { Send(stream, 403, "text/plain", Encoding.ASCII.GetBytes("forbidden host")); c.Close(); return; }   // DNS rebinding guard
             string path = line.Split(' ').ElementAtOrDefault(1) ?? "/";
             string route = path.Split('?')[0];
-            if (line.StartsWith("POST ") && route == "/api/settings") {
-                HandleSaveSettings(c, stream, origin, contentType, saveToken, contentLength, deadline);
+            if (line.StartsWith("POST ") && (route == "/api/settings" || route == "/api/frametimes-setup")) {
+                HandleSaveSettings(c, stream, origin, contentType, saveToken, contentLength, deadline, route == "/api/frametimes-setup");
                 c.Close();
                 return;
             }
@@ -399,12 +400,14 @@ public sealed class WebServer : IDisposable
         string why = b == null ? "These settings belong to the tray app. This copy was started from the command line."
             : !local ? "Settings can be changed on the PC running SVS Performance Monitor." : "";
         bool canEdit = b != null && local;
+        string frames = !FrameMonitor.PresentMonAvailable(null) ? "missing" : AutoStart.FrameTimesAccess();
         var view = new SettingsView(b?.Current ?? new AppSettings(), canEdit, why, SettingsStore.DefaultProfileFolder,
-            Program.Version, $"http://127.0.0.1:{_port}/", canEdit ? _saveToken : "");
+            Program.Version, $"http://127.0.0.1:{_port}/", canEdit ? _saveToken : "", frames, AutoStart.IsElevated());
         return System.Text.Json.JsonSerializer.Serialize(view, FsperfJson.Default.SettingsView);
     }
 
-    private void HandleSaveSettings(TcpClient c, NetworkStream stream, string origin, string contentType, string token, int length, DateTime deadline)
+    private void HandleSaveSettings(TcpClient c, NetworkStream stream, string origin, string contentType, string token, int length,
+        DateTime deadline, bool frameTimesSetup = false)
     {
         byte[] Err(string msg) => Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(msg, FsperfJson.Default.String));
         if (length <= 0 || length > 16 * 1024) {
@@ -424,6 +427,10 @@ public sealed class WebServer : IDisposable
         if (!IsLocal(c) || !OriginIsThisDashboard(origin) || !TokenMatches(token)) { Send(stream, 403, "application/json", Err("Settings can be changed on the PC running SVS Performance Monitor.")); return; }
         if (!contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase)) { Send(stream, 415, "application/json", Err("JSON only")); return; }
         if (Settings == null) { Send(stream, 409, "application/json", Err("These settings belong to the tray app. This copy was started from the command line.")); return; }
+        if (frameTimesSetup) {   // POST /api/frametimes-setup (body "{}"): a Windows permission prompt, waits for it
+            Send(stream, 200, "application/json", Err(Settings.SetupFrameTimes()));
+            return;
+        }
         AppSettings? s;
         try { s = System.Text.Json.JsonSerializer.Deserialize(body, FsperfJson.Default.AppSettings); } catch { s = null; }
         if (s == null) { Send(stream, 400, "application/json", Err("not settings")); return; }

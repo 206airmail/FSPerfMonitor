@@ -2,11 +2,11 @@
 #   1. a spinning .NET main thread (fsperf --burn): ~100% main-thread busy, CPU-bound verdict, samples at the asked rate
 #   2. a native busy main thread (certutil hashing a sparse 2 GB file): attributed to its real module (bcryptprimitives)
 #   3. the verdict rules (Collector.Judge) through --once on an idle process
-# Exit 0 = all passed. Build first (build.ps1). -Exe tests another build (e.g. the native publish\fsperf.exe).
+# Exit 0 = all passed. Build first (build.ps1). -Exe tests another build (e.g. the native publish\SVSPerfMonitor.exe).
 param([string]$Exe)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
-$exe = if ($Exe) { (Resolve-Path $Exe).Path } else { Join-Path $root 'src\bin\Release\net8.0-windows\win-x64\fsperf.exe' }
+$exe = if ($Exe) { (Resolve-Path $Exe).Path } else { Join-Path $root 'src\bin\Release\net10.0-windows\win-x64\SVSPerfMonitor.exe' }
 if (-not (Test-Path $exe)) { Write-Host "build first: $exe missing"; exit 2 }
 $fails = 0
 function Check([bool]$ok, [string]$what) {
@@ -53,15 +53,15 @@ foreach ($c in @(@('16.7', '16.0', '9.0', 'CPU-bound'), @('16.7', '8.0', '16.2',
     $v = & $exe --judge $c[0] $c[1] $c[2]
     Check ($v -eq $c[3]) "full-mode verdict: frame $($c[0]) ms, CPU $($c[1]), GPU $($c[2]) -> $v"
 }
-# stale ETW session decision (issue #9): FSPerf_<pid> sessions whose pid is not a live fsperf are stopped; others never
-$logman = "Name:                 Circular Kernel Context Logger`nName:                 FSPerf_111`nName:                 FSPerf_222   `nName:                 PresentMon_333`nName:                 XFSPerf_444`nName:                 FSPerf_notapid`n"
+# stale ETW session decision (issue #9): SVSPerf_<pid> sessions whose pid is not a live monitor are stopped; others never
+$logman = "Name:                 Circular Kernel Context Logger`nName:                 SVSPerf_111`nName:                 SVSPerf_222   `nName:                 PresentMon_333`nName:                 XSVSPerf_444`nName:                 SVSPerf_notapid`n"
 $stale = @($logman | & $exe --stale-sessions 222)
-$logman2 = "FSPerf_111                  Trace   Running`nFSPerf_222                  Trace   Running`nPresentMon_333  Trace Running`n"
+$logman2 = "SVSPerf_111                 Trace   Running`nSVSPerf_222                 Trace   Running`nPresentMon_333  Trace Running`n"
 $stale2 = @($logman2 | & $exe --stale-sessions 222)
-Check (($stale2 -join ',') -eq 'FSPerf_111') "stale sessions: dead fsperf's session stopped, live one and foreign ones kept ($($stale2 -join ','))"
-Check ($stale.Count -eq 0) "stale sessions: only lines that start with FSPerf_<digits> count ($($stale -join ','))"
-# the unprivileged cleanup on this machine must not crash fsperf (errors are logged, not fatal)
-foreach ($c in @(@('fsperf', 'live'), @('FSPerf', 'live'), @('dotnet', 'live'), @('notepad', 'other'))) {
+Check (($stale2 -join ',') -eq 'SVSPerf_111') "stale sessions: dead monitor's session stopped, live one and foreign ones kept ($($stale2 -join ','))"
+Check ($stale.Count -eq 0) "stale sessions: only lines that start with SVSPerf_<digits> count ($($stale -join ','))"
+# the unprivileged cleanup on this machine must not crash the monitor (errors are logged, not fatal)
+foreach ($c in @(@('SVSPerfMonitor', 'live'), @('svsperfmonitor', 'live'), @('dotnet', 'live'), @('fsperf', 'other'), @('notepad', 'other'))) {
     $r = & $exe --is-fsperf-name $c[0]
     Check ($r -eq $c[1]) "a live '$($c[0])' process -> its ETW session is $(if ($c[1] -eq 'live') { 'kept' } else { 'stale' })"
 }
@@ -102,7 +102,7 @@ $srv = Start-Process $exe -ArgumentList '--no-browser', '--no-frames', '--profil
 try {
     Start-Sleep -Milliseconds 1200
     $page = (curl.exe -s http://127.0.0.1:8799/log) -join "`n"
-    Check ($page -match '<title>FSPerf log</title>' -and $page -match 'href="/"') "GET /log serves the log page (links back to the dashboard)"
+    Check ($page -match '<title>SVS Performance Monitor log</title>' -and $page -match 'href="/"') "GET /log serves the log page (links back to the dashboard)"
     Check (((curl.exe -s http://127.0.0.1:8799/) -join "`n") -match 'href="/log"') "the dashboard links to /log"
     $first = (curl.exe -siN --max-time 2 'http://127.0.0.1:8799/log/stream?n=10') -join "`n"
     Check ($first -match 'text/event-stream' -and $first -match '"reset":true' -and $first -match 'first line' -and $first -match 'Warning: something odd') "stream: a new client gets the recent lines first"

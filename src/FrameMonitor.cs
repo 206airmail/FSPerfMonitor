@@ -17,7 +17,7 @@ public sealed record FrameStats(
 public sealed class FrameMonitor : IDisposable
 {
     // per FSPerf process: --stop_existing_session / --terminate_existing_session must never hit another instance's capture
-    private static readonly string Session = "FSPerf_" + Environment.ProcessId;
+    private static readonly string Session = EtwSessions.Prefix + Environment.ProcessId;
     private readonly string? _exe;
     private Process? _pm;
     private int _pid;
@@ -36,7 +36,7 @@ public sealed class FrameMonitor : IDisposable
         _exe = Locate(explicitPath);
         if (_exe == null) {
             _state = "off";
-            _hint = "PresentMon not found: put PresentMon-<version>-x64.exe next to fsperf.exe or in tools\\ (build.ps1 -FetchPresentMon), or pass --presentmon <path>";
+            _hint = "PresentMon not found: put PresentMon-<version>-x64.exe next to SVSPerfMonitor.exe or in tools\\ (build.ps1 -FetchPresentMon), or pass --presentmon <path>";
             return;
         }
         // a killed fsperf never stops its ETW session, and an orphan starves PresentMon of events (issue #9)
@@ -82,7 +82,7 @@ public sealed class FrameMonitor : IDisposable
         if (!string.IsNullOrEmpty(explicitPath)) return File.Exists(explicitPath) ? Path.GetFullPath(explicitPath) : null;
         string baseDir = AppContext.BaseDirectory;
         var dirs = new List<string> { baseDir, Path.Combine(baseDir, "tools") };
-        // a build tree: fsperf\src\bin\Release\net8.0-windows\win-x64\ -> fsperf\tools\
+        // a build tree: <repo>\src\bin\Release\net10.0-windows\win-x64\ -> <repo>\tools\
         for (var d = new DirectoryInfo(baseDir); d != null; d = d.Parent) {
             if (File.Exists(Path.Combine(d.FullName, "build.ps1")) && Directory.Exists(Path.Combine(d.FullName, "tools"))) {
                 dirs.Add(Path.Combine(d.FullName, "tools"));
@@ -109,7 +109,7 @@ public sealed class FrameMonitor : IDisposable
             if (st != "starting" || waited < WatchdogSeconds) return;
             if (_watchdogPid == pid) {   // the one restart did not help: keep waiting, but tell the user what PresentMon says
                 lock (_lock) if (_state == "starting")
-                    _hint = $"no frames from PresentMon after {waited:0} s and a restart{(lastErr.Length > 0 ? " (PresentMon: " + lastErr + ")" : "")}; if an old FSPerf_* ETW session is stuck run: logman stop FSPerf_<pid> -ets (admin)";
+                    _hint = $"no frames from PresentMon after {waited:0} s and a restart{(lastErr.Length > 0 ? " (PresentMon: " + lastErr + ")" : "")}; if an old SVSPerf_* ETW session is stuck run: logman stop SVSPerf_<pid> -ets (admin)";
                 return;
             }
             _watchdogPid = pid;
@@ -205,7 +205,7 @@ public sealed class FrameMonitor : IDisposable
                 _state = "denied";
                 _hint = InPerformanceLogUsers()
                     ? "access denied although this account is in Performance Log Users"
-                    : "full mode needs admin rights or the \"Performance Log Users\" group (sign out and in after joining); run fsperf as admin meanwhile";
+                    : "full mode needs admin rights or the \"Performance Log Users\" group (sign out and in after joining); run SVS Performance Monitor as admin meanwhile";
             } else if (_state != "denied") {
                 _state = "exited";
                 _hint = $"PresentMon stopped (exit {code}){(err.Length > 0 ? ": " + err : "")}";

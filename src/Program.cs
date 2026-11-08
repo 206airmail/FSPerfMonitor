@@ -1,10 +1,10 @@
 // Program.cs - FSPerf: a performance monitor for Farming Simulator 25, from outside the game. Copyright (c) 2026 Jared Brown.
 // MIT licence. See ..\README.md.
-//   fsperf [--port 8765] [--interval-ms 1000] [--sample-hz 0|250] [--record <file.csv>] [--pid <n>] [--profile <dir>]
+//   SVSPerfMonitor [--port 8765] [--interval-ms 1000] [--sample-hz 0|250] [--record <file.csv>] [--pid <n>] [--profile <dir>]
 //          [--once] [--no-browser] [--presentmon <exe>] [--no-frames] [--lan]
 //   --lan: the dashboard is also reachable from other computers (http://<this PC's IP>:<port>/); needs an inbound firewall
 //          rule for the port (printed when missing). The page is read-only.
-//   fsperf --burn <seconds>     (self-test helper: one busy main thread)
+//   SVSPerfMonitor --burn <seconds>     (self-test helper: one busy main thread)
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -23,7 +23,7 @@ public sealed class Options
     public bool Once;
     public bool NoBrowser;
     public int Seconds;   // stop after this many seconds (0 = until Ctrl+C)
-    public string? PresentMon;  // full mode: PresentMon console exe (default: next to fsperf.exe or in tools\)
+    public string? PresentMon;  // full mode: PresentMon console exe (default: next to SVSPerfMonitor.exe or in tools\)
     public bool NoFrames;       // basic mode only
     public bool Lan;            // listen on all interfaces, not only loopback
 
@@ -54,7 +54,7 @@ public sealed class Options
 
 public static class Program
 {
-    public const string Version = "0.3.0";
+    public static readonly string Version = typeof(Program).Assembly.GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{v.Build}" : "?";  // = csproj <Version> (#11)
 
     public static int Main(string[] args)
     {
@@ -71,12 +71,12 @@ public static class Program
             return 0;
         }
         if (args.Length == 2 && args[0] == "--is-fsperf-name") {  // self-test helper: would a live process of this name keep its ETW session?
-            Console.WriteLine(EtwSessions.IsFsperfProcessName(args[1], "fsperf") ? "live" : "other");
+            Console.WriteLine(EtwSessions.IsFsperfProcessName(args[1], "SVSPerfMonitor") ? "live" : "other");
             return 0;
         }
         if (args.Length == 1 && args[0] == "--logtail-selftest") return LogTailSelfTest.Run();   // self-test helper
         Options o;
-        try { o = Options.Parse(args); } catch (Exception e) { Console.Error.WriteLine($"fsperf: {e.Message}"); return 2; }
+        try { o = Options.Parse(args); } catch (Exception e) { Console.Error.WriteLine($"SVSPerfMonitor: {e.Message}"); return 2; }
         using var col = new Collector(o);
         if (o.Once) {
             col.Tick();
@@ -90,7 +90,7 @@ public static class Program
         web.Start();
         tail.Start();
         string url = $"http://127.0.0.1:{o.Port}/";
-        Console.WriteLine($"FSPerf {Version}: dashboard {url}  (Ctrl+C to stop){(rec != null ? "  recording " + o.Record : "")}");
+        Console.WriteLine($"SVS Performance Monitor {Version}: dashboard {url}  (Ctrl+C to stop){(rec != null ? "  recording " + o.Record : "")}");
         if (o.Lan) {
             foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()) {
                 if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
@@ -101,7 +101,7 @@ public static class Program
                 }
             }
             Console.WriteLine($"  other computers need an inbound firewall rule for TCP {o.Port} (admin PowerShell, once):");
-            Console.WriteLine($"  New-NetFirewallRule -DisplayName 'FSPerf dashboard' -Direction Inbound -Protocol TCP -LocalPort {o.Port} -Action Allow -Profile Private -RemoteAddress LocalSubnet");
+            Console.WriteLine($"  New-NetFirewallRule -DisplayName 'SVS Performance Monitor dashboard' -Direction Inbound -Protocol TCP -LocalPort {o.Port} -Action Allow -Profile Private -RemoteAddress LocalSubnet");
         }
         if (!o.NoBrowser) {
             try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
@@ -118,7 +118,7 @@ public static class Program
                 rec?.Write(s);
                 lastError = "";
             } catch (Exception e) {   // one bad sample never ends the monitor (the game comes and goes all day)
-                if (e.Message != lastError) Console.Error.WriteLine($"FSPerf: sample failed ({e.GetType().Name}: {e.Message}); retrying");
+                if (e.Message != lastError) Console.Error.WriteLine($"SVSPerfMonitor: sample failed ({e.GetType().Name}: {e.Message}); retrying");
                 lastError = e.Message;
             }
         }

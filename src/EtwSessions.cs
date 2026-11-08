@@ -10,10 +10,10 @@ namespace FSPerf;
 
 public static class EtwSessions
 {
-    public const string Prefix = "FSPerf_";
+    public const string Prefix = "SVSPerf_";
     private static readonly Regex NameRx = new(@"^(" + Prefix + @"(\d+))(?:\s|$)", RegexOptions.Multiline | RegexOptions.CultureInvariant);
 
-    public static void Log(string msg) => Console.Error.WriteLine("FSPerf: " + msg);
+    public static void Log(string msg) => Console.Error.WriteLine("SVSPerfMonitor: " + msg);
 
     // the FSPerf_<pid> session names in `logman query -ets` output, with their pids
     public static List<(string Name, int Pid)> Parse(string logmanOutput)
@@ -38,10 +38,10 @@ public static class EtwSessions
         } catch { return false; }  // no such process
     }
 
-    // conservative: fsperf.exe, our own program name, or dotnet (`dotnet fsperf.dll`) all count as live - a session is
-    // stopped only when its pid is gone or clearly some other program
+    // conservative: SVSPerfMonitor.exe, our own program name, or dotnet (`dotnet SVSPerfMonitor.dll`) all count as live -
+    // a session is stopped only when its pid is gone or clearly some other program
     public static bool IsFsperfProcessName(string name, string ownName)
-        => name.Equals(ownName, StringComparison.OrdinalIgnoreCase) || name.Equals("fsperf", StringComparison.OrdinalIgnoreCase)
+        => name.Equals(ownName, StringComparison.OrdinalIgnoreCase) || name.Equals("SVSPerfMonitor", StringComparison.OrdinalIgnoreCase)
            || name.Equals("dotnet", StringComparison.OrdinalIgnoreCase);
 
     private static (int Code, string Out) Logman(string args)

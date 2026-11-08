@@ -23,14 +23,14 @@ public sealed class MonitorHost : IDisposable
     public event Action<string>? Error;   // a failed tick (logged by the caller; the monitor keeps going)
 
     // throws when the dashboard port can't be opened (e.g. in use): the caller reports it
-    public MonitorHost(Options o)
+    public MonitorHost(Options o, ISettingsBackend? settings = null)
     {
         _o = o;
         _col = new Collector(o);
         try {
             _rec = o.Record != null ? new CsvRecorder(o.Record) : null;
             _tail = new LogTail(Path.Combine(o.ProfileDir, "log.txt"));
-            _web = new WebServer(o.Port, o.Lan, _tail);
+            _web = new WebServer(o.Port, o.Lan, _tail) { Settings = settings };
             _web.Start();
         } catch {
             _rec?.Dispose();

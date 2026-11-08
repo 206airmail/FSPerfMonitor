@@ -9,6 +9,14 @@ using System.Text;
 
 namespace FSPerf;
 
+// the tray app's side of the Settings page
+public interface ISettingsBackend
+{
+    AppSettings Current { get; }
+    string? Save(AppSettings s);   // null = saved; else the message to show
+    void Saved();                  // called after the answer went out: apply them
+}
+
 public sealed class WebServer : IDisposable
 {
     private readonly TcpListener _listener;
@@ -42,7 +50,13 @@ public sealed class WebServer : IDisposable
         using var ms2 = new MemoryStream();
         s2.CopyTo(ms2);
         _logPage = ms2.ToArray();
+        using var s3 = Assembly.GetExecutingAssembly().GetManifestResourceStream("settings.html")!;
+        using var ms3 = new MemoryStream();
+        s3.CopyTo(ms3);
+        _settingsPage = ms3.ToArray();
     }
+
+    private readonly byte[] _settingsPage;
 
     public void Start()
     {
@@ -69,20 +83,35 @@ public sealed class WebServer : IDisposable
             var deadline = DateTime.UtcNow.AddMilliseconds(RequestDeadlineMs);
             string? line = ReadLineBounded(stream, 2048, deadline);
             if (line == null) { c.Close(); return; }
-            int headers = 0;
-            string lastEventId = "", hostHeader = "";
+            int headers = 0, contentLength = 0;
+            string lastEventId = "", hostHeader = "", origin = "", contentType = "";
             while (true) {
                 string? h = ReadLineBounded(stream, 8192, deadline);
                 if (h == null || ++headers > 100) { c.Close(); return; }
                 if (h.Length == 0) break;  // end of the headers
                 if (h.StartsWith("Last-Event-ID:", StringComparison.OrdinalIgnoreCase)) lastEventId = h[14..].Trim();
                 else if (h.StartsWith("Host:", StringComparison.OrdinalIgnoreCase)) hostHeader = h[5..].Trim();
+                else if (h.StartsWith("Origin:", StringComparison.OrdinalIgnoreCase)) origin = h[7..].Trim();
+                else if (h.StartsWith("Content-Type:", StringComparison.OrdinalIgnoreCase)) contentType = h[13..].Trim();
+                else if (h.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase)) int.TryParse(h[15..].Trim(), out contentLength);
             }
             if (hostHeader.Length == 0) { Send(stream, 400, "text/plain", Encoding.ASCII.GetBytes("Host header required")); c.Close(); return; }
             if (!HostAllowed(hostHeader)) { Send(stream, 403, "text/plain", Encoding.ASCII.GetBytes("forbidden host")); c.Close(); return; }   // DNS rebinding guard
             string path = line.Split(' ').ElementAtOrDefault(1) ?? "/";
             string route = path.Split('?')[0];
+            if (line.StartsWith("POST ") && route == "/api/settings") {
+                HandleSaveSettings(c, stream, origin, contentType, contentLength, deadline);
+                c.Close();
+                return;
+            }
             if (!line.StartsWith("GET ")) { Send(stream, 405, "text/plain", Encoding.ASCII.GetBytes("GET only")); c.Close(); return; }
+            if (route == "/api/settings") {
+                Send(stream, 200, "application/json", Encoding.UTF8.GetBytes(SettingsViewJson(IsLocal(c))));
+                c.Close();
+                return;
+            }
+            if (route == "/settings") { Send(stream, 200, "text/html; charset=utf-8", _settingsPage); c.Close(); return; }
+            if (Assets.TryGetValue(route, out var asset)) { Send(stream, 200, asset.Type, asset.Body, cache: true); c.Close(); return; }
             if (path == "/events") {
                 // reserve a live-view slot atomically (check + reserve under one lock), released when registered or failed
                 lock (_lock) {
@@ -328,12 +357,91 @@ public sealed class WebServer : IDisposable
         }
     }
 
-    private static void Send(NetworkStream s, int code, string type, byte[] body)
+    private static void Send(NetworkStream s, int code, string type, byte[] body, bool cache = false)
     {
-        string reason = code == 200 ? "OK" : code == 404 ? "Not Found" : code == 503 ? "Service Unavailable" : code == 403 ? "Forbidden" : code == 400 ? "Bad Request" : "Method Not Allowed";
-        var head = Encoding.ASCII.GetBytes($"HTTP/1.1 {code} {reason}\r\nContent-Type: {type}\r\nContent-Length: {body.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n");
+        string reason = code switch {
+            200 => "OK", 400 => "Bad Request", 403 => "Forbidden", 404 => "Not Found", 409 => "Conflict", 413 => "Payload Too Large",
+            415 => "Unsupported Media Type", 422 => "Unprocessable Content", 503 => "Service Unavailable", _ => "Method Not Allowed",
+        };
+        // the page's style sheet, logo and icons may be cached briefly; everything with live data never
+        string cc = cache ? "max-age=300" : "no-store";
+        var head = Encoding.ASCII.GetBytes($"HTTP/1.1 {code} {reason}\r\nContent-Type: {type}\r\nContent-Length: {body.Length}\r\nCache-Control: {cc}\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n");
         s.Write(head);
         s.Write(body);
+    }
+
+    // ---- settings (the tray app) ------------------------------------------------------------------------------------
+    // GET /api/settings: the settings + whether this viewer may change them. POST /api/settings: save, from THIS PC only:
+    // the connection comes from a loopback address, the request is JSON (a page on another site can't send that without a
+    // CORS preflight, which this server never answers) and its Origin is this dashboard. A phone on the home network
+    // (--lan) sees the settings read-only.
+    public ISettingsBackend? Settings { get; set; }
+
+    private static bool IsLocal(TcpClient c) =>
+        c.Client.RemoteEndPoint is IPEndPoint ep && IPAddress.IsLoopback(ep.Address.IsIPv4MappedToIPv6 ? ep.Address.MapToIPv4() : ep.Address);
+
+    private bool OriginIsThisDashboard(string origin) =>
+        origin == $"http://127.0.0.1:{_port}" || origin == $"http://localhost:{_port}" || origin == $"http://[::1]:{_port}";
+
+    private string SettingsViewJson(bool local)
+    {
+        var b = Settings;
+        string why = b == null ? "These settings belong to the tray app. This copy was started from the command line."
+            : !local ? "Settings can be changed on the PC running SVS Performance Monitor." : "";
+        var view = new SettingsView(b?.Current ?? new AppSettings(), b != null && local, why, SettingsStore.DefaultProfileFolder,
+            Program.Version, $"http://127.0.0.1:{_port}/");
+        return System.Text.Json.JsonSerializer.Serialize(view, FsperfJson.Default.SettingsView);
+    }
+
+    private void HandleSaveSettings(TcpClient c, NetworkStream stream, string origin, string contentType, int length, DateTime deadline)
+    {
+        byte[] Err(string msg) => Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(msg, FsperfJson.Default.String));
+        if (length <= 0 || length > 16 * 1024) {
+            Send(stream, 413, "application/json", Err("bad length"));
+            c.Client.Shutdown(SocketShutdown.Send);   // no body is read: end politely rather than reset the connection
+            return;
+        }
+        // the body first, whatever the answer: closing a socket with unread data resets the connection, and the client
+        // may then never see the answer
+        var body = new byte[length];
+        for (int got = 0; got < length;) {
+            if (DateTime.UtcNow > deadline) return;
+            int n = stream.Read(body, got, length - got);
+            if (n <= 0) return;
+            got += n;
+        }
+        if (!IsLocal(c) || !OriginIsThisDashboard(origin)) { Send(stream, 403, "application/json", Err("Settings can be changed on the PC running SVS Performance Monitor.")); return; }
+        if (!contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase)) { Send(stream, 415, "application/json", Err("JSON only")); return; }
+        if (Settings == null) { Send(stream, 409, "application/json", Err("These settings belong to the tray app. This copy was started from the command line.")); return; }
+        AppSettings? s;
+        try { s = System.Text.Json.JsonSerializer.Deserialize(body, FsperfJson.Default.AppSettings); } catch { s = null; }
+        if (s == null) { Send(stream, 400, "application/json", Err("not settings")); return; }
+        string? problem = Settings.Save(s);
+        if (problem != null) { Send(stream, 422, "application/json", Err(problem)); return; }
+        Send(stream, 200, "application/json", Encoding.UTF8.GetBytes(SettingsViewJson(true)));
+        Settings.Saved();   // after the answer is sent: the tray app restarts the monitor (and this server) with them
+    }
+
+    // the page's static files (embedded): the design's style sheet and the brand art
+    private static readonly Dictionary<string, (string Type, byte[] Body)> Assets = LoadAssets();
+
+    private static Dictionary<string, (string, byte[])> LoadAssets()
+    {
+        var d = new Dictionary<string, (string, byte[])>(StringComparer.Ordinal);
+        foreach (var (route, res, type) in new[] {
+            ("/assets/styles.css", "styles.css", "text/css; charset=utf-8"),
+            ("/assets/tokens.css", "tokens.css", "text/css; charset=utf-8"),
+            ("/assets/logo-64.png", "logo-64.png", "image/png"),
+            ("/assets/logo-256.png", "logo-256.png", "image/png"),
+            ("/favicon.png", "favicon-32.png", "image/png"),
+        }) {
+            using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream(res);
+            if (s == null) continue;
+            using var ms = new MemoryStream();
+            s.CopyTo(ms);
+            d[route] = (type, ms.ToArray());
+        }
+        return d;
     }
 
     public void Publish(string json)

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark light">
+<title>SVS Performance Monitor · Settings</title><link rel="icon" href="/favicon.png" type="image/png"><link rel="stylesheet" href="/assets/styles.css">
+<!-- Settings (0.4, #6). Design: design/settings.html (Codex, SimVizion UI skill). Data: GET/POST /api/settings; saving is
+     accepted from this PC only (the server checks), a phone sees the values read-only. Options of later steps (#7 start
+     with Windows, frame-times setup, full permissions; #9 home network) are shown but not changeable yet. -->
+</head>
+<body data-page="settings"><a class="skip" href="#main">Skip to content</a>
+<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a href="/">Dashboard</a><a href="/log">Game log</a><a href="/settings" aria-current="page">Settings</a></nav></div></header>
+<main id="main" class="wrap form-page">
+<div class="page-title"><h1>Settings</h1><span class="tag" id="settings-origin">This PC</span></div>
+<div id="settings-notice" role="status" class="banner" hidden></div>
+<form id="settings-form" class="stack" novalidate>
+<section class="card"><h2>General</h2>
+<div class="setting"><div><div class="setting-title">Start SVS Performance Monitor when Windows starts</div><p>Keep it ready when you want to play.</p></div><div class="actions"><span class="tag">Next update</span><label class="check-target" title="Start SVS Performance Monitor when Windows starts"><input id="startup" type="checkbox" aria-label="Start SVS Performance Monitor when Windows starts" disabled></label></div></div>
+<div class="setting"><div><div class="setting-title">Open the dashboard when SVS Performance Monitor starts</div><p>Open it in your usual browser.</p></div><label class="check-target" title="Open the dashboard when SVS Performance Monitor starts"><input id="open-browser" type="checkbox" aria-label="Open the dashboard when SVS Performance Monitor starts"></label></div>
+</section>
+<section class="card" id="frame-times"><h2>Frame times</h2>
+<div class="setting"><div><div class="setting-title">Show frame times (FPS and stutter)</div><p>Windows will ask for permission once, then sign out and back in. After that, SVS Performance Monitor can show FPS without full permissions.</p></div><div class="actions"><span class="tag">Next update</span><button type="button" class="primary" id="setup" disabled>Set up</button></div></div>
+</section>
+<section class="card"><h2>Phone and home network</h2>
+<div class="setting"><div><div class="setting-title">Let my phone or other computers at home open the dashboard</div><p>They can also see your game log, which shows your Windows user name and mod list. Use a trusted private home network. Windows will ask once.</p></div><div class="actions"><span class="tag">Next update</span><label class="check-target" title="Let my phone or other computers at home open the dashboard"><input id="lan" type="checkbox" aria-label="Let my phone or other computers at home open the dashboard" disabled></label></div></div>
+</section>
+<section class="card"><h2>Advanced</h2>
+<div class="setting"><div><div class="setting-title">Run with full permissions</div><p>Only needed for the detailed mod breakdown. Windows asks once.</p></div><div class="actions"><span class="tag">Next update</span><label class="check-target" title="Run with full permissions"><input id="elevated" type="checkbox" aria-label="Run with full permissions" disabled></label></div></div>
+<div class="setting"><div><div class="setting-title">Show what the game’s main loop spends time on</div><p>Briefly pauses the game hundreds of times a second; it slows the game a little (a few percent). Leave off for timing-sensitive comparisons, or keep it the same for both runs.</p></div><label class="check-target" title="Show what the game’s main loop spends time on"><input id="sampling-enabled" type="checkbox" aria-label="Show what the game’s main loop spends time on"></label></div>
+<div class="field"><label for="profile">Farming Simulator settings folder</label><input id="profile" type="text" spellcheck="false" aria-describedby="profile-help profile-error"><span id="profile-help" class="meta">Found automatically. Change only if you use a different folder.</span><span id="profile-error" class="field-error" hidden></span></div>
+<div class="field"><label for="port">Port</label><input id="port" type="number" min="1" max="65535" aria-describedby="port-help port-error"><span id="port-help" class="meta">The dashboard’s address on this PC. Saving restarts SVS Performance Monitor’s dashboard on the new address.</span><span id="port-error" class="field-error" hidden>⚠ Enter a whole number from 1 to 65535.</span></div>
+</section>
+<div class="row between"><p id="save-note" class="small">Changes are saved on this PC.</p><button class="primary" type="submit" id="save">Save changes</button></div>
+</form>
+</main>
+<footer class="wrap footer"><span>SimVizion Studios · SVS Performance Monitor <span id="version"></span></span><span>Watches the game from outside. Nothing is added to the game.</span></footer>
+<div class="toast" id="toast" role="status" hidden><button aria-label="Dismiss message" id="dismiss">×</button><span id="toast-text"></span></div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let view = null;
+
+function toast(text) { $("toast-text").textContent = text; $("toast").hidden = false; }
+$("dismiss").onclick = () => { $("toast").hidden = true; };
+
+function notice(title, text) {
+  const n = $("settings-notice");
+  if (!title) { n.hidden = true; n.textContent = ""; return; }
+  n.innerHTML = "";
+  const d = document.createElement("div"), s = document.createElement("strong"), p = document.createElement("p");
+  s.textContent = title; p.className = "small"; p.textContent = text;
+  d.append(s, p); n.append(d); n.hidden = false;
+}
+
+function show(v) {
+  view = v;
+  const s = v.settings;
+  $("open-browser").checked = s.openDashboardOnStart;
+  $("sampling-enabled").checked = s.mainLoopBreakdown;
+  $("profile").value = s.profileFolder || v.defaultProfileFolder;
+  $("port").value = s.port;
+  $("version").textContent = v.version;
+  const ro = !v.canEdit;
+  $("settings-origin").textContent = ro ? "Read-only" : "This PC";
+  for (const id of ["open-browser", "sampling-enabled", "profile", "port"]) {
+    const el = $(id);
+    if (el.type === "checkbox") el.disabled = ro; else el.readOnly = ro;
+  }
+  $("save").hidden = ro;
+  $("save-note").textContent = ro ? "Viewing settings from another device." : "Changes are saved on this PC.";
+  notice(ro ? "Settings can be changed on the PC running SVS Performance Monitor" : "", v.readOnlyReason);
+}
+
+function fieldError(id, msg) {
+  const e = $(id + "-error");
+  if (msg) { e.textContent = "⚠ " + msg; e.hidden = false; $(id).setAttribute("aria-invalid", "true"); }
+  else { e.hidden = true; $(id).removeAttribute("aria-invalid"); }
+}
+
+async function load() {
+  try {
+    const r = await fetch("/api/settings", { cache: "no-store" });
+    show(await r.json());
+  } catch { notice("SVS Performance Monitor is not answering", "Check that it is running, then reload this page."); }
+}
+
+// after a save the tray app restarts its dashboard (on the new port if it changed): wait for it, then load from there
+async function waitFor(url) {
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    try { const r = await fetch(url + "api/settings", { cache: "no-store" }); if (r.ok) return true; } catch { }
+  }
+  return false;
+}
+
+$("settings-form").onsubmit = async e => {
+  e.preventDefault();
+  if (!view || !view.canEdit) return;
+  const port = $("port").valueAsNumber, okPort = Number.isInteger(port) && port >= 1 && port <= 65535;
+  fieldError("port", okPort ? "" : "Enter a whole number from 1 to 65535.");
+  fieldError("profile", "");
+  if (!okPort) { $("port").focus(); return; }
+  const profile = $("profile").value.trim();
+  const s = Object.assign({}, view.settings, {
+    openDashboardOnStart: $("open-browser").checked,
+    mainLoopBreakdown: $("sampling-enabled").checked,
+    profileFolder: profile === view.defaultProfileFolder ? "" : profile,
+    port: port,
+  });
+  $("save").disabled = true;
+  try {
+    const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(s) });
+    const body = await r.json();
+    if (!r.ok) {
+      if (r.status === 422 && /folder/i.test(body)) fieldError("profile", body);
+      else if (r.status === 422) fieldError("port", body);
+      else notice("Settings were not saved", body);
+      return;
+    }
+    const url = "http://" + location.hostname + ":" + port + "/";
+    toast("Saved. Restarting the dashboard with the new settings…");
+    if (await waitFor(url)) {
+      if (port !== view.settings.port) location.href = url + "settings"; else { await load(); toast("Saved."); }
+    } else notice("The dashboard didn’t come back", "Port " + port + " may be in use by another program. SVS Performance Monitor keeps running on its previous port.");
+  } catch { notice("Settings were not saved", "SVS Performance Monitor is not answering."); }
+  finally { $("save").disabled = false; }
+};
+
+load();
+</script>
+</body></html>

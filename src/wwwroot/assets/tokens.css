@@ -1,0 +1,118 @@
+/* SimVizion Unified UI v1.4 — reference tokens. Map into existing framework themes as needed. */
+:root {
+  --sv-window:#050C0E; --sv-panel:#0D1B1F;
+  --sv-surface-content-raised:#101F23; --sv-elevated:#14272B; --sv-recessed:#071215;
+  --sv-border:#294147; --sv-text:#EDF4F5;
+  --sv-text-readable-secondary:#C5D4D6; --sv-text-secondary:#A6B8BC; --sv-text-muted:#91A6AB;
+  --sv-lime:#9AF000; --sv-primary:var(--sv-lime); --sv-primary-hover:#ADFF24; --sv-primary-pressed:#7DC900;
+  --sv-teal:#42CDD2; --sv-selected-bg:#194047; --sv-selected-border:#42C4CB;
+  --sv-hover-bg:#1B3237; --sv-hover-border:#41858D; --sv-warning:#F0B84B; --sv-error:#F07171;
+  --sv-secondary-pressed:#102328; --sv-destructive-bg:#24191C; --sv-destructive-hover:#F48787; --sv-destructive-pressed-bg:#341C22; --sv-destructive-pressed:#D85B5B;
+  --sv-scroll-track:#14272B; --sv-scroll-thumb:#41858D; --sv-scroll-thumb-hover:#42AEB5; --sv-scroll-thumb-active:#42C4CB;
+  --sv-switch-on:#203518; --sv-switch-on-hover:#2A451E; --sv-switch-on-pressed:#14250F;
+  --sv-status-success:#A7D5A0; --sv-status-info:#86CDD0;
+  --sv-link:#86CDD0; --sv-link-hover:#B2E5E6; --sv-value-positive:#A7D5A0; --sv-value-negative:#E8A0A0;
+  --sv-disabled-bg:#101A1D; --sv-disabled-border:#223338; --sv-disabled-text:#789096;
+  --sv-radius-control:4px; --sv-radius-panel:6px; --sv-radius-dialog:8px;
+  --sv-gap-panel:6px; --sv-pad-panel:12px; --sv-font:'Segoe UI Variable','Segoe UI',sans-serif;
+  --sv-shadow:0 2px 8px rgba(0,0,0,.40);
+}
+.sv-app {background:var(--sv-window);color:var(--sv-text);font:400 13px/1.3 var(--sv-font);}
+.sv-panel {background:var(--sv-panel);border:1px solid var(--sv-border);border-radius:var(--sv-radius-panel);display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+.sv-panel__header {flex:none;min-height:32px;background:transparent;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:14px;font-weight:600;}
+.sv-panel__content {flex:1;min-height:0;overflow:auto;padding:var(--sv-pad-panel);}
+.sv-panel__footer {flex:none;background:transparent;display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:8px 12px;}
+.sv-button {box-sizing:border-box;min-height:32px;padding:0 10px;border:1px solid var(--sv-border);border-radius:var(--sv-radius-control);background:var(--sv-recessed);color:var(--sv-text);font:inherit;cursor:pointer;}
+.sv-button:hover {background:var(--sv-hover-bg);border-color:var(--sv-hover-border);}
+.sv-button:focus-visible,.sv-input:focus-visible {outline:none;border-color:var(--sv-teal);}
+.sv-button--primary {background:var(--sv-lime);border-color:var(--sv-lime);color:var(--sv-window);font-weight:600;}
+.sv-button--primary:hover {background:var(--sv-primary-hover);border-color:var(--sv-primary-hover);}
+.sv-button--primary:active {background:var(--sv-primary-pressed);border-color:var(--sv-primary-pressed);}
+.sv-button--secondary {background:var(--sv-recessed);}
+.sv-button:disabled {background:var(--sv-disabled-bg);border-color:var(--sv-disabled-border);color:var(--sv-disabled-text);cursor:not-allowed;}
+.sv-input {box-sizing:border-box;height:32px;padding:0 8px;color:var(--sv-text);background:var(--sv-recessed);border:1px solid var(--sv-border);border-radius:4px;font:inherit;}
+.sv-input::placeholder {color:var(--sv-text-muted);}
+.sv-row--selected {background:var(--sv-selected-bg);}
+.sv-panel__header--separated {border-bottom:1px solid var(--sv-border);}
+.sv-panel__header--elevated {background:var(--sv-elevated);}
+.sv-panel__footer--separated {border-top:1px solid var(--sv-border);}
+.sv-panel__footer--elevated {background:var(--sv-elevated);}
+.sv-nav-item[aria-current="page"],.sv-nav-item[aria-selected="true"] {background:var(--sv-selected-bg);border:1px solid var(--sv-selected-border);}
+.sv-input[aria-invalid="true"] {border-color:var(--sv-border);}
+.sv-input[aria-invalid="true"]:focus-visible {border-color:var(--sv-teal);}
+.sv-field-error {color:var(--sv-error);}
+.sv-value--featured-positive,.sv-column--featured-positive {color:var(--sv-value-positive);font-variant-numeric:tabular-nums;}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important;scroll-behavior:auto!important;}}
+
+/* General-purpose styling examples; apply only to components that exist. */
+:root { --sv-scrollbar-width:6px; --sv-toolbar-control-height:28px; --sv-web-page-max:1120px; --sv-web-form-max:760px; --sv-web-reading-max:720px; }
+.sv-app :is(*, *::before, *::after) { box-sizing:border-box; }
+.sv-app { scrollbar-width:thin; scrollbar-color:var(--sv-scroll-thumb) var(--sv-scroll-track); }
+.sv-app ::-webkit-scrollbar { width:var(--sv-scrollbar-width);height:var(--sv-scrollbar-width); }
+.sv-app ::-webkit-scrollbar-track { background:var(--sv-scroll-track); }
+.sv-app ::-webkit-scrollbar-thumb { background:var(--sv-scroll-thumb);border-radius:10px; }
+.sv-app ::-webkit-scrollbar-thumb:hover { background:var(--sv-scroll-thumb-hover); }
+.sv-app ::-webkit-scrollbar-thumb:active { background:var(--sv-scroll-thumb-active); }
+.sv-button--secondary:active { background:var(--sv-secondary-pressed); }
+.sv-button--destructive { background:var(--sv-destructive-bg);border-color:var(--sv-error);color:var(--sv-destructive-hover); }
+.sv-button--destructive:hover { border-color:var(--sv-destructive-hover); }
+.sv-button--destructive:active { background:var(--sv-destructive-pressed-bg);border-color:var(--sv-destructive-pressed); }
+/* Visible contrasting focus on filled lime controls; keep teal focus on dark fields. */
+.sv-button--primary:focus-visible, .sv-checkbox--checked:focus-visible { outline:2px solid var(--sv-teal);outline-offset:1px;box-shadow:inset 0 0 0 2px var(--sv-window); }
+.sv-toolbar .sv-button,.sv-toolbar .sv-input { min-height:var(--sv-toolbar-control-height);height:var(--sv-toolbar-control-height); }
+.sv-link { color:var(--sv-link);text-decoration:none; }
+.sv-link:hover,.sv-link:focus-visible { color:var(--sv-link-hover);text-decoration:underline; }
+.sv-web-prose .sv-link { text-decoration:underline;text-underline-offset:2px; }
+/* Default routine positive values use neutral text. Use --exceptional only for explicitly meaningful outliers. */
+.sv-value--positive { color:var(--sv-text);font-variant-numeric:tabular-nums; }
+.sv-value--positive-exceptional { color:var(--sv-value-positive);font-variant-numeric:tabular-nums; }
+.sv-value--negative { color:var(--sv-value-negative);font-variant-numeric:tabular-nums; }
+.sv-metric { font:600 28px/1.15 var(--sv-font);font-variant-numeric:tabular-nums;color:var(--sv-text); }
+.sv-tag { min-height:20px;display:inline-flex;align-items:center;gap:4px;padding:0 6px;border:1px solid var(--sv-border);border-radius:4px;background:var(--sv-elevated);color:var(--sv-text-secondary);font:500 11px/1.2 var(--sv-font);white-space:nowrap; }
+.sv-tag--compact { min-height:18px; }
+.sv-tab-count { display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--sv-recessed);color:var(--sv-text-muted);font:500 11px/1 var(--sv-font);font-variant-numeric:tabular-nums; }
+.sv-alert-banner { display:flex;align-items:flex-start;gap:8px;padding:12px;border-radius:6px;border:1px solid var(--sv-border);background:var(--sv-elevated); }
+.sv-alert-banner__icon { width:20px;height:20px;flex:none; }
+.sv-segmented { display:inline-flex;align-items:stretch;min-height:28px;border:1px solid var(--sv-border);border-radius:4px;overflow:hidden;background:var(--sv-recessed); }
+.sv-segmented__option { padding:0 10px;min-height:28px;border:0;border-right:1px solid var(--sv-border);background:transparent;color:var(--sv-text-secondary);font:500 13px var(--sv-font); }
+.sv-segmented__option:last-child { border-right:0; }
+.sv-segmented__option[aria-checked="true"],.sv-segmented__option[aria-selected="true"] { background:var(--sv-selected-bg);color:var(--sv-text);box-shadow:inset 0 0 0 1px var(--sv-selected-border); }
+.sv-segmented__option:focus-visible { outline:1px solid var(--sv-teal);outline-offset:-2px; }
+.sv-inline-code { padding:1px 2px;border-radius:4px;background:var(--sv-recessed);color:var(--sv-text);font:400 12px/1.3 Consolas,monospace;overflow-wrap:anywhere; }
+.sv-web-page { width:min(calc(100% - 24px),var(--sv-web-page-max));margin-inline:auto; }
+.sv-web-form { width:100%;max-width:var(--sv-web-form-max); }
+.sv-web-reading { max-width:var(--sv-web-reading-max); }
+@media (pointer:coarse) { .sv-web-touch-target { min-width:40px;min-height:40px; } }
+
+/* Compact density and semantic control examples. These are not a complete widget library. */
+.sv-button--compact,.sv-input--compact {min-height:28px;height:28px;}
+.sv-button--compact {padding-inline:8px;}
+.sv-button--icon {display:inline-flex;align-items:center;justify-content:center;min-width:32px;width:32px;padding:0;border:1px solid var(--sv-border);}
+.sv-button--icon.sv-button--compact {width:28px;min-width:28px;}
+.sv-control-group {display:flex;align-items:center;gap:6px;}
+.sv-section + .sv-section {margin-top:12px;}
+.sv-section__heading {font:600 14px/1.3 var(--sv-font);color:var(--sv-text);}
+.sv-dropdown-option[aria-selected="true"] {background:var(--sv-selected-bg);color:var(--sv-text);}
+.sv-dropdown-option[data-keyboard-highlighted="true"] {background:var(--sv-hover-bg);box-shadow:inset 3px 0 0 var(--sv-selected-border);}
+.sv-dropdown-option[aria-selected="true"][data-keyboard-highlighted="true"] {background:var(--sv-selected-bg);}
+.sv-status--success {color:var(--sv-status-success);}
+.sv-progress-fill {background:var(--sv-lime);}
+.sv-tab[aria-selected="true"] {background:var(--sv-selected-bg);border:1px solid var(--sv-selected-border);color:var(--sv-text);}
+
+/* v1.3 optional content presentation variants; canonical rules are in references/. */
+.sv-content-card {background:var(--sv-surface-content-raised);border:1px solid var(--sv-border);border-radius:6px;padding:16px;}
+.sv-text--readable-secondary {color:var(--sv-text-readable-secondary);}
+.sv-kpi--headline-featured {color:var(--sv-lime);font-variant-numeric:tabular-nums;font-weight:600;}
+.sv-dashboard-copy {font-size:14px;line-height:1.3;}
+@media (prefers-reduced-motion:reduce){.sv-content-card {transition:none;}}
+
+/* Optional atmospheric examples; scope to chosen roles, never global state styles. */
+:root {
+  --sv-brand-wash: radial-gradient(ellipse at 20% 30%, rgba(0, 160, 165, .10), transparent 65%);
+  --sv-brand-halo: 0 0 20px rgba(0, 185, 190, .14);
+  --sv-primary-halo: 0 0 14px rgba(154, 240, 0, .16);
+}
+.sv-brand-region { background-color:var(--sv-window); background-image:var(--sv-brand-wash); }
+.sv-brand-artwork { box-shadow:var(--sv-brand-halo); }
+.sv-button--primary.sv-button--illuminated:not(:disabled):not(:focus-visible) { box-shadow:var(--sv-primary-halo); }
+/* Preserve existing focus rules; illumination is static, optional, and never a focus signal. */

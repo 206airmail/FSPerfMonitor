@@ -26,6 +26,12 @@
   <ItemGroup>
     <EmbeddedResource Include="wwwroot\index.html" LogicalName="index.html" />
     <EmbeddedResource Include="wwwroot\log.html" LogicalName="log.html" />
+    <EmbeddedResource Include="wwwroot\settings.html" LogicalName="settings.html" />
+    <EmbeddedResource Include="wwwroot\assets\styles.css" LogicalName="styles.css" />
+    <EmbeddedResource Include="wwwroot\assets\tokens.css" LogicalName="tokens.css" />
+    <EmbeddedResource Include="wwwroot\brand\logo-64.png" LogicalName="logo-64.png" />
+    <EmbeddedResource Include="wwwroot\brand\logo-256.png" LogicalName="logo-256.png" />
+    <EmbeddedResource Include="wwwroot\brand\favicon-32.png" LogicalName="favicon-32.png" />
     <EmbeddedResource Include="wwwroot\brand\tray-watching.ico" LogicalName="tray-watching.ico" />
     <EmbeddedResource Include="wwwroot\brand\tray-waiting.ico" LogicalName="tray-waiting.ico" />
   </ItemGroup>

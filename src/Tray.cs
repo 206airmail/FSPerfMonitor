@@ -13,9 +13,10 @@ namespace FSPerf;
 public static unsafe class TrayApp
 {
     private const string Title = "SVS Performance Monitor";
-    private const uint WM_TRAY = TrayNative.WM_APP + 1, WM_OPEN_REQUEST = TrayNative.WM_APP + 2, WM_EXIT_REQUEST = TrayNative.WM_APP + 3;
-    private const int CmdOpen = 1, CmdLog = 2, CmdExit = 9;
-    private const nuint TimerId = 1;
+    private const uint WM_TRAY = TrayNative.WM_APP + 1, WM_OPEN_REQUEST = TrayNative.WM_APP + 2, WM_EXIT_REQUEST = TrayNative.WM_APP + 3,
+        WM_SETTINGS_SAVED = TrayNative.WM_APP + 4;
+    private const int CmdOpen = 1, CmdLog = 2, CmdSettings = 3, CmdExit = 9;
+    private const nuint TimerId = 1, RestartTimerId = 2;
 
     private static MonitorHost? s_host;
     private static IntPtr s_hwnd, s_iconWatching, s_iconWaiting;
@@ -27,16 +28,49 @@ public static unsafe class TrayApp
     private static string ExitEventName(string instance) => $@"Local\{instance}.Exit";
     private static string MutexName(string instance) => $@"Local\{instance}.Running";
 
-    public static int Run(Options o)
+    private static string[] s_args = [];
+    private static AppSettings s_settings = new();
+    private static readonly SettingsBackend s_backend = new();
+
+    // the Settings page's side in the tray app: save to the file, then restart the monitor with them (on the window's thread)
+    private sealed class SettingsBackend : ISettingsBackend
     {
+        public AppSettings Current => s_settings.Clone();
+        public string? Save(AppSettings s)
+        {
+            string? problem = SettingsStore.Validate(s);
+            if (problem != null) return problem;
+            try { SettingsStore.Save(s); } catch (Exception e) { return "Could not save the settings: " + e.Message; }
+            s_settings = s.Clone();
+            return null;
+        }
+        public void Saved() => TrayNative.PostMessageW(s_hwnd, WM_SETTINGS_SAVED, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    // the options for this run: the settings file, then the tray app's own command line (e.g. --lan) on top
+    private static Options CurrentOptions() => SettingsStore.ToOptions(s_settings, s_args);
+
+    public static int Run(string[] args)
+    {
+        s_args = args;
+        Options o;
+        try {
+            SettingsStore.OverridePath = Options.Parse(args).SettingsFile;
+            s_settings = SettingsStore.Load();
+            o = CurrentOptions();
+        } catch (ArgumentException e) {
+            TrayNative.MessageBoxW(IntPtr.Zero, e.Message, Title, TrayNative.MB_ICONWARNING);
+            return 2;
+        }
         using var mutex = new Mutex(true, MutexName(o.Instance), out bool first);
         if (!first) {   // already running: let that copy open its dashboard (it knows its port and runs as the right user);
                         // --no-browser (e.g. the start with Windows) only makes sure it runs
-            if (!o.NoBrowser && EventWaitHandle.TryOpenExisting(OpenEventName(o.Instance), out var open)) using (open) open.Set();
+            // (only an explicit --no-browser: the "open on start" setting is about starting, not about a second double-click)
+            if (!args.Contains("--no-browser") && EventWaitHandle.TryOpenExisting(OpenEventName(o.Instance), out var open)) using (open) open.Set();
             return 0;
         }
         try {
-            try { s_host = new MonitorHost(o); }
+            try { s_host = new MonitorHost(o, s_backend); }
             catch (System.Net.Sockets.SocketException) {
                 TrayNative.MessageBoxW(IntPtr.Zero, $"{Title} could not start: another program is already using port {o.Port}, " +
                     "which the dashboard needs.\n\nClose that program and start it again.", Title, TrayNative.MB_ICONWARNING);
@@ -146,7 +180,12 @@ public static unsafe class TrayApp
                     }
                     return IntPtr.Zero;
                 case TrayNative.WM_TIMER:
-                    Refresh();
+                    if ((nuint)wParam == RestartTimerId) { TrayNative.KillTimer(hwnd, RestartTimerId); RestartMonitor(); }
+                    else Refresh();
+                    return IntPtr.Zero;
+                case WM_SETTINGS_SAVED:
+                    // a moment's delay: the page's request has been answered, its connection may still be closing
+                    TrayNative.SetTimer(hwnd, RestartTimerId, 300, IntPtr.Zero);
                     return IntPtr.Zero;
                 case WM_OPEN_REQUEST:
                     OpenUrl(DashboardUrl());
@@ -174,6 +213,28 @@ public static unsafe class TrayApp
 
     private static string DashboardUrl() => s_host?.Url ?? "http://127.0.0.1:8765/";
 
+    // new settings: stop the monitor (its frame capture too) and start it again with them. A port another program uses:
+    // back to the previous settings, and say so.
+    private static void RestartMonitor()
+    {
+        var old = s_host;
+        int oldPort = old != null ? new Uri(old.Url).Port : s_settings.Port;
+        s_host = null;
+        old?.Dispose();
+        try {
+            s_host = new MonitorHost(CurrentOptions(), s_backend);
+        } catch (System.Net.Sockets.SocketException) {
+            int wanted = s_settings.Port;
+            s_settings.Port = oldPort;
+            try { SettingsStore.Save(s_settings); } catch { }
+            TrayNative.MessageBoxW(IntPtr.Zero, $"Port {wanted} is already used by another program, so the dashboard stays on port {oldPort}.",
+                Title, TrayNative.MB_ICONWARNING);
+            try { s_host = new MonitorHost(CurrentOptions(), s_backend); } catch { }
+        }
+        s_host?.Start();
+        Refresh();
+    }
+
     private static void ShowMenu()
     {
         IntPtr menu = TrayNative.CreatePopupMenu();
@@ -182,6 +243,7 @@ public static unsafe class TrayApp
             Append(menu, TrayNative.MF_SEPARATOR, 0, null);
             Append(menu, TrayNative.MF_STRING, CmdOpen, "Open dashboard");
             Append(menu, TrayNative.MF_STRING, CmdLog, "Game log");
+            Append(menu, TrayNative.MF_STRING, CmdSettings, "Settings");
             Append(menu, TrayNative.MF_SEPARATOR, 0, null);
             Append(menu, TrayNative.MF_STRING, CmdExit, "Exit");
             TrayNative.SetMenuDefaultItem(menu, CmdOpen, 0);
@@ -194,6 +256,7 @@ public static unsafe class TrayApp
             switch (cmd) {
                 case CmdOpen: OpenUrl(DashboardUrl()); break;
                 case CmdLog: OpenUrl(DashboardUrl() + "log"); break;
+                case CmdSettings: OpenUrl(DashboardUrl() + "settings"); break;
                 case CmdExit: TrayNative.DestroyWindow(s_hwnd); break;
             }
         } finally {

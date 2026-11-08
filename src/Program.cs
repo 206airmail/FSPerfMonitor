@@ -31,10 +31,12 @@ public sealed class Options
     public bool Tray;           // the tray app (also: no arguments at all, i.e. a double-click)
     public bool Exit;           // ask the running tray app to quit cleanly
     public string Instance = "SVSPerfMonitor";   // single-instance name (the self-test uses its own)
+    public string? SettingsFile;                 // the tray app's settings file (default %APPDATA%; the self-test uses its own)
 
-    public static Options Parse(string[] a)
+    // the command line, on top of `start` (the tray app's settings) or the defaults
+    public static Options Parse(string[] a, Options? start = null)
     {
-        var o = new Options();
+        var o = start ?? new Options();
         for (int i = 0; i < a.Length; i++) {
             string Next() => i + 1 < a.Length ? a[++i] : throw new ArgumentException($"{a[i]} needs a value");
             switch (a[i]) {
@@ -54,6 +56,7 @@ public sealed class Options
                 case "--exit": o.Exit = true; break;
                 case "--instance": o.Instance = Next(); break;
                 case "--tray-child": break;   // internal marker (Main)
+                case "--settings": o.SettingsFile = Next(); break;
                 default: throw new ArgumentException($"unknown option {a[i]}");
             }
         }
@@ -101,7 +104,7 @@ public static class Program
             Console.WriteLine(r == 0 ? "SVS Performance Monitor: stopped" : r == 1 ? "SVS Performance Monitor: not running" : "SVS Performance Monitor: did not stop in time");
             return r;
         }
-        if (tray) { o.Tray = true; return TrayApp.Run(o); }
+        if (tray) return TrayApp.Run(args);   // its options: the settings file, then this command line
         if (o.Once) {
             using var col = new Collector(o);
             col.Tick();

@@ -10,6 +10,8 @@ namespace FSPerf;
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals)]
 [JsonSerializable(typeof(Snapshot))]
+[JsonSerializable(typeof(AppSettings))]
+[JsonSerializable(typeof(SettingsView))]
 [JsonSerializable(typeof(string))]
 internal partial class FsperfJson : JsonSerializerContext
 {

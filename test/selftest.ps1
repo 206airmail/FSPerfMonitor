@@ -3,7 +3,9 @@
 #   2. a native busy main thread (certutil hashing a sparse 2 GB file): attributed to its real module (bcryptprimitives)
 #   3. the verdict rules (Collector.Judge) through --once on an idle process
 # Exit 0 = all passed. Build first (build.ps1). -Exe tests another build (e.g. the native publish\SVSPerfMonitor.exe).
-param([string]$Exe)
+# -Lan also checks the read-only view from this PC's network address: that listens on all interfaces, and Windows then
+# asks to allow the test build through the firewall (a rule for Private AND Public networks if allowed): only on request.
+param([string]$Exe, [switch]$Lan)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 $exe = if ($Exe) { (Resolve-Path $Exe).Path } else { Join-Path $root 'src\bin\Release\net10.0-windows\win-x64\SVSPerfMonitor.exe' }
@@ -107,6 +109,50 @@ Check $closed "tray app: its port is closed after the exit"
 $ex2 = & $exe --exit --instance $inst
 Check ($LASTEXITCODE -eq 1) "--exit with nothing running says so ('$ex2')"
 if (-not $t1.HasExited) { Stop-Process -Id $t1.Id -Force }
+
+# 0.4 settings (#6): the tray app with its own settings file (never the real one), own instance and ports
+function Post([string]$url, [string]$body, [string]$origin, [string]$ctype = 'application/json') {
+    $h = @{}; if ($origin) { $h['Origin'] = $origin }
+    try { $r = Invoke-WebRequest $url -Method Post -Body $body -ContentType $ctype -Headers $h -UseBasicParsing -TimeoutSec 5; return [int]$r.StatusCode }
+    catch { if ($_.Exception.Response) { return [int]$_.Exception.Response.StatusCode } return -1 }
+}
+function WaitUp([int]$port) { for ($i = 0; $i -lt 40; $i++) { try { return (Invoke-WebRequest "http://127.0.0.1:$port/api/settings" -UseBasicParsing -TimeoutSec 2).Content | ConvertFrom-Json } catch { Start-Sleep -Milliseconds 250 } }; return $null }
+$sf = Join-Path $env:TEMP ('svsperf_selftest_settings_' + [guid]::NewGuid().ToString('N').Substring(0, 6) + '.json')
+'{"port":8798,"openDashboardOnStart":false,"mainLoopBreakdown":false}' | Set-Content $sf -Encoding ascii
+$inst = 'SVSPerfSelfTest_' + [guid]::NewGuid().ToString('N').Substring(0, 6)
+$stArgs = @('--tray', '--tray-child', '--no-frames', '--settings', $sf, '--instance', $inst) + @(if ($Lan) { '--lan' })
+$st = Start-Process $exe -ArgumentList $stArgs -PassThru
+$null = $st.Handle
+$v = WaitUp 8798
+Check ($v -and $v.canEdit -and $v.settings.port -eq 8798 -and -not $v.settings.openDashboardOnStart) "settings: the tray app reads its settings file; editable from this PC"
+$page = try { (Invoke-WebRequest 'http://127.0.0.1:8798/settings' -UseBasicParsing).Content } catch { '' }
+$css = try { (Invoke-WebRequest 'http://127.0.0.1:8798/assets/styles.css' -UseBasicParsing).StatusCode } catch { 0 }
+Check ($page -match '<h1>Settings</h1>' -and $css -eq 200) "settings: the page and its style sheet are served"
+$good = 'http://127.0.0.1:8798'
+$body = '{"version":1,"port":8798,"openDashboardOnStart":false,"mainLoopBreakdown":true,"profileFolder":""}'
+Check ((Post "$good/api/settings" $body '') -eq 403) "settings: a save without an Origin is refused"
+Check ((Post "$good/api/settings" $body 'http://evil.example') -eq 403) "settings: a save from another site's page is refused"
+Check ((Post "$good/api/settings" $body $good 'text/plain') -eq 415) "settings: a save that is not JSON is refused"
+Check ((Post "$good/api/settings" '{"port":70000}' $good) -eq 422) "settings: an impossible port is refused"
+$lanIp = if ($Lan) { (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.)' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -First 1).IPAddress }
+if ($lanIp) {
+    $rv = try { (Invoke-WebRequest "http://${lanIp}:8798/api/settings" -UseBasicParsing -TimeoutSec 3).Content | ConvertFrom-Json } catch { $null }
+    Check ($rv -and -not $rv.canEdit -and (Post "http://${lanIp}:8798/api/settings" $body "http://${lanIp}:8798") -eq 403) "settings: from the home network (${lanIp}) they are read-only"
+}
+Check ((Post "$good/api/settings" $body $good) -eq 200) "settings: a save from this PC's dashboard is accepted"
+Start-Sleep -Milliseconds 1500
+$null = WaitUp 8798
+$sn = $null; for ($i = 0; $i -lt 12 -and -not ($sn -and $sn.sampleHz -eq 250); $i++) { Start-Sleep -Milliseconds 500; $sn = try { (Invoke-WebRequest "$good/api/snapshot" -UseBasicParsing).Content | ConvertFrom-Json } catch { $null } }
+$saved = Get-Content $sf -Raw | ConvertFrom-Json
+Check ($saved.mainLoopBreakdown -eq $true -and $sn.sampleHz -eq 250) "settings: saved to the file and applied after the restart (breakdown on: $($sn.sampleHz) Hz)"
+$body2 = '{"version":1,"port":8794,"openDashboardOnStart":false,"mainLoopBreakdown":false,"profileFolder":""}'
+Check ((Post "$good/api/settings" $body2 $good) -eq 200) "settings: a new port is accepted"
+$v2 = WaitUp 8794
+$old = try { $null = Invoke-WebRequest "$good/" -UseBasicParsing -TimeoutSec 2; 'open' } catch { 'closed' }
+Check ($v2 -and $v2.settings.port -eq 8794 -and $old -eq 'closed') "settings: the dashboard moved to the new port (old one $old)"
+$null = & $exe --exit --instance $inst
+Check ($LASTEXITCODE -eq 0 -and $st.WaitForExit(15000)) "settings: the tray app still exits cleanly"
+Remove-Item $sf -ErrorAction SilentlyContinue
 
 # the published pair (-Exe publish\SVSPerfMonitor.com): the starter SVSPerfMonitor.exe next to it
 $starter = [IO.Path]::ChangeExtension($exe, '.exe')

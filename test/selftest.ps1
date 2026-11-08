@@ -64,7 +64,10 @@ $j = & $exe --once --pid $PID | ConvertFrom-Json
 # (a member of BUILTIN\Performance Log Users, SID S-1-5-32-559, may read the events without admin: PresentMon starts)
 $perfLogUser = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.SecurityIdentifier]'S-1-5-32-559')
-if (-not $j.elevated -and $perfLogUser) {
+if ($j.frames.state -eq 'off' -and "$($j.frames.hint)" -like 'PresentMon not found*') {
+    # a plain build.ps1 does not download PresentMon: full mode is off for that reason, whatever the permissions
+    Check ($j.mode -eq 'basic') "PresentMon not installed: full mode off, basic mode used (build.ps1 -FetchPresentMon for full mode)"
+} elseif (-not $j.elevated -and $perfLogUser) {
     Check ($j.frames.state -in @('starting', 'running')) "not elevated, in Performance Log Users: full mode allowed ('$($j.frames.state)')"
 } elseif (-not $j.elevated) {
     Check ($j.mode -eq 'basic' -and ($j.frames.state -in @('denied', 'off'))) "not elevated: full mode '$($j.frames.state)', basic mode used"

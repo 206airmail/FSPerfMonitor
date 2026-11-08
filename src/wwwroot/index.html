@@ -1,241 +1,185 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SVS Performance Monitor</title>
-<style>
-:root {
-  --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5f6b7a; --line: #e2e6eb;
-  --cpu: #2f6fdb; --gpu: #d9822b; --ok: #2e8b57; --warn: #c0392b; --both: #8e44ad; --idle: #7f8c8d;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #111418; --panel: #1a1f25; --ink: #e8ecf1; --muted: #9aa6b4; --line: #2a313a;
-          --cpu: #5b93f0; --gpu: #f0a050; --ok: #4cc38a; --warn: #ef6b5b; --both: #b37fd6; --idle: #95a3a6; }
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
-header h1 { font-size: 17px; margin: 0; font-weight: 650; }
-#status { color: var(--muted); font-size: 13px; }
-#verdict { margin-left: auto; padding: 6px 12px; border-radius: 999px; font-weight: 650; color: #fff; background: var(--idle); }
-#verdictReason { color: var(--muted); font-size: 13px; width: 100%; text-align: right; }
-main { padding: 16px 20px; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); max-width: 1400px; margin: 0 auto; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
-.panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
-.wide { grid-column: 1 / -1; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-.tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-.tile .k { color: var(--muted); font-size: 12px; }
-.tile .v { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.tile .s { color: var(--muted); font-size: 12px; }
-canvas { width: 100%; height: 220px; display: block; }
-.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 6px; }
-.legend i { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin-right: 5px; }
-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-td, th { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
-th { color: var(--muted); font-weight: 600; font-size: 12px; }
-td.num { text-align: right; white-space: nowrap; }
-.bar { height: 6px; border-radius: 3px; background: var(--cpu); min-width: 1px; }
-.kind { color: var(--muted); font-size: 12px; }
-.Plugin .bar { background: var(--gpu); } .Host .bar { background: var(--both); } .Graphics .bar { background: var(--ok); }
-.note { color: var(--muted); font-size: 12px; margin-top: 8px; }
-.state-active { color: var(--ok); } .state-other { color: var(--warn); }
-code { font-size: 12px; }
-.badge { margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; text-transform: none; letter-spacing: 0; background: var(--line); color: var(--ink); }
-.badge.full { background: var(--ok); color: #fff; }
-</style>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark light">
+<title>SVS Performance Monitor · Dashboard</title><link rel="icon" href="/favicon.png" type="image/png"><link rel="stylesheet" href="/assets/styles.css">
+<!-- The player-first dashboard (0.5, #8). Design: design/dashboard.html + design/UI_SPEC.md (Codex, SimVizion UI skill).
+     Data: GET /events (one snapshot per tick, server-sent events); the frame-times setup state from GET /api/settings.
+     Rules from the spec: the backend's verdict is never recalculated; no invented zeros ("NaN", null, no frames = —);
+     waiting resets the histories; a lost connection keeps the last readings, clearly marked as old. -->
 </head>
-<body>
-<header>
-  <h1>SVS Performance Monitor</h1>
-  <a href="/log" style="color:var(--cpu);text-decoration:none;font-weight:600">Game log</a> <a href="/settings" style="color:var(--cpu);text-decoration:none;font-weight:600;margin-left:12px">Settings</a>
-  <span id="status">connecting...</span>
-  <span id="verdict">-</span>
-  <span id="verdictReason"></span>
-</header>
-<main>
-  <section class="panel wide">
-    <h2>Frames <span id="modeBadge" class="badge">basic mode</span></h2>
-    <div class="tiles">
-      <div class="tile"><div class="k">FPS</div><div class="v" id="fFps">-</div><div class="s" id="fLow">1% low -</div></div>
-      <div class="tile"><div class="k">Frame time</div><div class="v" id="fFt">-</div><div class="s" id="fP99">p99 -</div></div>
-      <div class="tile"><div class="k">CPU busy / frame</div><div class="v" id="fCpu">-</div><div class="s" id="fCpuW">waits -</div></div>
-      <div class="tile"><div class="k">GPU busy / frame</div><div class="v" id="fGpu">-</div><div class="s" id="fGpuW">waits -</div></div>
-      <div class="tile"><div class="k">Latency</div><div class="v" id="fLat">-</div><div class="s" id="fMode">display</div></div>
-    </div>
-    <canvas id="frameChart"></canvas>
-    <div class="legend"><span><i style="background:var(--ink)"></i>frame time ms</span><span><i style="background:var(--cpu)"></i>CPU busy ms</span><span><i style="background:var(--gpu)"></i>GPU busy ms</span></div>
-    <div class="note" id="frameNote">Full mode reads per-frame timing from Windows (PresentMon).</div>
-  </section>
-  <section class="panel wide">
-    <h2>Load</h2>
-    <div class="tiles">
-      <div class="tile"><div class="k">Main thread busy</div><div class="v" id="tMain">-</div><div class="s">of one core</div></div>
-      <div class="tile"><div class="k">GPU 3D</div><div class="v" id="tGpu">-</div><div class="s">busiest 3D engine</div></div>
-      <div class="tile"><div class="k">Game CPU</div><div class="v" id="tCpu">-</div><div class="s" id="tCores">of all cores</div></div>
-      <div class="tile"><div class="k">VRAM (game)</div><div class="v" id="tVram">-</div><div class="s">dedicated</div></div>
-      <div class="tile"><div class="k">RAM (game)</div><div class="v" id="tRam">-</div><div class="s" id="tPriv">working set</div></div>
-    </div>
-  </section>
-  <section class="panel wide">
-    <h2>Last 5 minutes</h2>
-    <canvas id="chart"></canvas>
-    <div class="legend"><span><i style="background:var(--cpu)"></i>main thread busy %</span><span><i style="background:var(--gpu)"></i>GPU 3D %</span></div>
-  </section>
-  <section class="panel">
-    <h2>Main thread: where the time goes</h2>
-    <table><thead><tr><th>Module</th><th>Kind</th><th style="width:35%"></th><th class="num">Share</th></tr></thead><tbody id="mods"></tbody></table>
-    <div class="note" id="modsNote">Sampled from outside the game. A plugin's share is the time spent in its own code (game code its hooks call counts as the game).</div>
-  </section>
-  <section class="panel">
-    <h2>Busiest game threads</h2>
-    <table><thead><tr><th>Thread</th><th style="width:45%"></th><th class="num">Busy (one core)</th></tr></thead><tbody id="threads"></tbody></table>
-  </section>
-  <section class="panel wide">
-    <h2>FSPluginHost plugins</h2>
-    <div id="fsp" class="note">-</div>
-  </section>
+<body data-page="dashboard"><a class="skip" href="#main">Skip to content</a>
+<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a href="/" aria-current="page">Dashboard</a><a href="/log">Game log</a><a href="/settings">Settings</a></nav></div></header>
+<main id="main" class="wrap">
+<div class="page-title"><h1>Dashboard</h1><div class="row"><span class="status" id="game-status"></span><span class="tag" id="mode"></span></div></div>
+<section class="verdict" aria-labelledby="verdict" aria-live="polite"><div class="eyebrow">Farming Simulator 25</div><h2 id="verdict">Connecting…</h2><p id="reason"></p>
+<div class="metrics"><div class="metric"><div class="metric-label">FPS</div><div class="metric-value" id="fps">—</div><div class="meta">Frames each second</div></div><div class="metric"><div class="metric-label">1% low</div><div class="metric-value" id="low">—</div><div class="meta">A guide to the slowest frames</div></div><div class="metric"><div class="metric-label">Frame time</div><div class="metric-value" id="ft">—</div><div class="meta">Average · lower is smoother</div></div></div></section>
+<div id="frame-banner" class="banner" style="margin-top:16px" hidden></div>
+<section class="card trend" id="trend" hidden><div class="row between"><h2>Frame times</h2><span class="meta">Last 5 minutes · milliseconds</span></div><div id="frame-chart"></div><div class="legend"><span>Frame time</span><span class="cpu">Processor work – dashed</span><span class="gpu">Graphics work · dotted</span></div><p class="meta" id="trend-summary"></p></section>
+<details class="small"><summary>What does this mean?</summary><p>FPS counts frames each second. Higher usually feels smoother. Frame time is how long each frame takes; lower is better. The 1% low helps you spot uneven performance even when the average FPS looks good.</p><p style="margin-top:8px">The verdict is a guide for this moment. A frame rate cap, a menu or loading can change it. Compare the same place in the game when testing a change.</p></details>
+<details id="advanced"><summary>Advanced <span class="meta">Loads, memory, threads and plugins</span></summary><div class="advanced-grid">
+<section class="card panel span-all"><div class="row between"><h2>Loads and memory</h2><span class="meta" id="process"></span></div><div class="readout" id="loads"></div></section>
+<section class="card panel span-all"><div class="row between"><h2>Load over time</h2><span class="meta">Last 5 minutes · percent</span></div><div id="load-chart"></div><div class="legend"><span class="cpu">Main thread busy – dashed</span><span class="gpu">GPU 3D · dotted</span></div></section>
+<section class="card panel span-all"><h2>Per-frame detail</h2><div class="readout" id="frame-details"></div><p class="meta" id="capture-note" style="margin-top:12px"></p></section>
+<section class="card panel"><h2 class="section-head">Main thread: where the time goes</h2><table><thead><tr><th scope="col">Module / kind</th><th scope="col" class="numeric">Share / samples</th></tr></thead><tbody id="modules"></tbody></table><p class="meta" id="sampling" style="margin-top:12px"></p><p class="small" style="margin-top:8px">A plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.</p></section>
+<section class="card panel"><h2 class="section-head">Busiest game threads</h2><table><thead><tr><th scope="col">Thread ID</th><th scope="col" class="numeric">Busy · one core</th></tr></thead><tbody id="threads"></tbody></table></section>
+<section class="card panel span-all"><div class="row between"><h2>FSPluginHost plugins</h2><a href="/log">Open game log →</a></div><p class="small" id="host" style="margin-top:8px"></p><p class="meta" id="host-written" style="margin-top:4px"></p><div class="plugin-list" id="plugins"></div><p class="small" id="services" style="margin-top:12px"></p></section>
+<section class="card panel span-all"><h2 class="section-head">Diagnostics</h2><p class="small mono" id="diagnostics"></p></section>
+</div></details>
 </main>
+<footer class="wrap footer"><span>SimVizion Studios · SVS Performance Monitor</span><span>Watches the game from outside. Nothing is added to the game.</span></footer>
 <script>
-const hist = [];             // {t, main, gpu}
-const fhist = [];            // {ft, cpu, gpu} per tick (ms)
-const HISTORY = 300;
+"use strict";
+const PRODUCT = "SVS Performance Monitor";
 const $ = id => document.getElementById(id);
-const fmt = (v, d = 0) => (typeof v === "number" && isFinite(v)) ? v.toFixed(d) : "-";
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const verdictColor = { "CPU-bound": "--cpu", "GPU-bound": "--gpu", "both near the limit": "--both", "neither": "--idle", "mixed": "--both" };
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const finite = v => typeof v === "number" && Number.isFinite(v);   // "NaN" (JSON string), null, undefined: not a reading
+const number = (v, d = 1) => finite(v) ? v.toFixed(d) : "—";
+const fmt = (v, unit, d = 1) => finite(v) ? number(v, d) + " " + unit : "—";
+const readout = (label, value, note = "") => `<dl><dt>${esc(label)}</dt><dd>${esc(value)}${note ? `<small>${esc(note)}</small>` : ""}</dd></dl>`;
 
-function draw() {
-  const c = $("chart"), dpr = window.devicePixelRatio || 1;
-  const w = c.clientWidth, h = c.clientHeight;
-  c.width = w * dpr; c.height = h * dpr;
-  const g = c.getContext("2d");
-  g.scale(dpr, dpr);
-  g.clearRect(0, 0, w, h);
-  const padL = 32, padB = 18, pw = w - padL - 6, ph = h - padB - 6;
-  g.strokeStyle = css("--line"); g.fillStyle = css("--muted"); g.font = "11px system-ui"; g.lineWidth = 1;
-  for (const y of [0, 50, 85, 100]) {
-    const yy = 6 + ph * (1 - y / 100);
-    g.beginPath(); g.moveTo(padL, yy); g.lineTo(padL + pw, yy); g.stroke();
-    g.fillText(y + "%", 2, yy + 4);
-  }
-  const line = (key, color) => {
-    g.strokeStyle = css(color); g.lineWidth = 2; g.beginPath();
-    let started = false;
-    hist.forEach((p, i) => {
-      const v = p[key];
-      if (typeof v !== "number" || !isFinite(v)) { started = false; return; }
-      const x = padL + pw * (i + HISTORY - hist.length) / (HISTORY - 1), y = 6 + ph * (1 - Math.min(100, v) / 100);
-      if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y);
-    });
-    g.stroke();
-  };
-  line("main", "--cpu");
-  line("gpu", "--gpu");
+const verdictCopy = {
+  "GPU-bound": ["Your graphics card is the limit", "The game is waiting for graphics work to finish. Try lowering graphics settings, then compare the same place in the game."],
+  "CPU-bound": ["Your processor is the limit", "The game needs more time to finish its calculations. Try reducing the number of active vehicles or objects, then compare the same place."],
+  "neither": ["Neither is the limit right now", "The game may be holding a steady frame rate, showing a menu or loading."],
+  "both near the limit": ["Your processor and graphics card are both near the limit", "Both are working hard. Try one change at a time and compare the same place in the game."],
+  "mixed": ["The limit is changing", "The readings are close. Keep playing in the same area to see a clearer pattern."],
+  "unknown": ["There is not enough information yet", "Graphics readings are unavailable. The other readings are still shown below."],
+  "waiting": ["Waiting for the game", "Start Farming Simulator 25. This page will pick it up automatically."],
+};
+const banners = {
+  setup: ["See FPS and spot stutter", "Set up frame times on this PC. Windows will ask for permission once, then sign out and back in.", "Set up", "/settings#frame-times"],
+  signout: ["One more step", "Sign out of Windows and back in to finish setting up frame times. Until then you can still see processor and graphics loads."],
+  basic: ["Frame times are off", "You can still see processor and graphics loads."],
+  starting: ["Starting frame times", "Keep the game open. Load readings are available while frame times start."],
+  "no-frames": ["Waiting for frame times", "No frames have arrived yet. Bring the game to the foreground and keep playing."],
+  missing: ["Frame times need a missing file", "The frame-times tool is missing. Check the files that came with " + PRODUCT + ".", "Open Settings", "/settings#frame-times"],
+  error: ["Frame times could not start", "Load readings are still available. Open Settings to check setup, then restart " + PRODUCT + ".", "Open Settings", "/settings#frame-times"],
+  exited: ["Frame times stopped", "Load readings are still available. Restart " + PRODUCT + " to try again."],
+  waiting: ["No readings yet", "FPS, frame times and loads will appear when the game is running."],
+  disconnected: ["These readings are out of date", "Check that " + PRODUCT + " is running on your PC and that your home network is connected."],
+};
+
+// the frame-times setup state (ready / signout / setup / missing), from the settings: "denied" capture = not set up yet
+let frameAccess = "";
+fetch("/api/settings", { cache: "no-store" }).then(r => r.json()).then(v => { frameAccess = v.frameTimes || ""; if (last) render(last); }).catch(() => { });
+
+// one page state from a real snapshot (spec: Dashboard states)
+function stateOf(s) {
+  if (!connected) return "disconnected";
+  if (!s.attached) return "waiting";
+  const f = s.frames;
+  if (!f) return "basic";                                    // started with --no-frames
+  if (f.state === "running") return f.frames > 0 ? "full" : "no-frames";
+  if (f.state === "denied") return frameAccess === "signout" ? "signout" : "setup";
+  if (f.state === "off") return /not found/i.test(f.hint || "") ? "missing" : "basic";
+  return ["starting", "error", "exited"].includes(f.state) ? f.state : "basic";
 }
 
-function drawFrames() {
-  const c = $("frameChart"), dpr = window.devicePixelRatio || 1;
-  const w = c.clientWidth, h = c.clientHeight;
-  c.width = w * dpr; c.height = h * dpr;
-  const g = c.getContext("2d");
-  g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
-  const padL = 40, padB = 18, pw = w - padL - 6, ph = h - padB - 6;
-  let top = 20;
-  for (const p of fhist) for (const k of ["ft", "cpu", "gpu"]) if (isFinite(p[k])) top = Math.max(top, p[k]);
-  top = Math.ceil(top / 10) * 10;
-  g.strokeStyle = css("--line"); g.fillStyle = css("--muted"); g.font = "11px system-ui"; g.lineWidth = 1;
-  for (const y of [0, top / 2, top]) {
-    const yy = 6 + ph * (1 - y / top);
-    g.beginPath(); g.moveTo(padL, yy); g.lineTo(padL + pw, yy); g.stroke();
-    g.fillText(y.toFixed(0) + " ms", 2, yy + 4);
-  }
-  const line = (key, color) => {
-    g.strokeStyle = css(color); g.lineWidth = 2; g.beginPath();
-    let started = false;
-    fhist.forEach((p, i) => {
-      const v = p[key];
-      if (!isFinite(v)) { started = false; return; }
-      const x = padL + pw * (i + HISTORY - fhist.length) / (HISTORY - 1), y = 6 + ph * (1 - v / top);
-      if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y);
-    });
-    g.stroke();
-  };
-  line("ft", "--ink"); line("cpu", "--cpu"); line("gpu", "--gpu");
-}
+// the last 5 minutes (one point per snapshot, ~1 s): reset when the game goes away
+const HISTORY = 300;
+let frameHist = [], loadHist = [], last = null, connected = false, lastTime = null;
 
-function renderFrames(s) {
-  const f = s.frames, full = s.mode === "full";
-  const b = $("modeBadge");
-  b.textContent = full ? "full mode" : "basic mode"; b.className = "badge" + (full ? " full" : "");
-  const n = x => (typeof x === "number") ? x : NaN;
-  if (!f) { $("frameNote").textContent = "Full mode off (--no-frames)."; return; }
-  $("fFps").textContent = f.frames ? fmt(n(f.fps)) : "-";
-  $("fLow").textContent = "1% low " + (f.frames ? fmt(n(f.low1PctFps)) : "-");
-  $("fFt").textContent = f.frames ? fmt(n(f.frameTimeAvgMs), 1) + " ms" : "-";
-  $("fP99").textContent = "p99 " + (f.frames ? fmt(n(f.frameTimeP99Ms), 1) + " ms" : "-");
-  $("fCpu").textContent = f.frames ? fmt(n(f.cpuBusyMs), 1) + " ms" : "-";
-  $("fCpuW").textContent = "waits " + (f.frames ? fmt(n(f.cpuWaitMs), 1) + " ms" : "-");
-  $("fGpu").textContent = f.frames ? fmt(n(f.gpuBusyMs), 1) + " ms" : "-";
-  $("fGpuW").textContent = "waits " + (f.frames ? fmt(n(f.gpuWaitMs), 1) + " ms" : "-");
-  $("fLat").textContent = f.frames ? fmt(n(f.displayLatencyMs), 1) + " ms" : "-";
-  $("fMode").textContent = "display" + (f.presentMode ? " · " + f.presentMode : "") + (f.runtime ? " · " + f.runtime : "");
-  const why = { off: "PresentMon not found.", denied: "Full mode needs admin rights or the Performance Log Users group.", starting: "starting the capture...",
-    running: f.frames ? "Per-frame timing from Windows presentation events (PresentMon)." : "capture running, no frames yet (game paused or minimised?)",
-    exited: "PresentMon stopped.", error: "PresentMon error." };
-  $("frameNote").textContent = (why[f.state] || f.state) + (f.hint ? " " + f.hint : "") + (s.elevated ? " (running as admin)" : "");
-  if (s.attached) {
-    fhist.push({ ft: f.frames ? n(f.frameTimeAvgMs) : NaN, cpu: f.frames ? n(f.cpuBusyMs) : NaN, gpu: f.frames ? n(f.gpuBusyMs) : NaN });
-    while (fhist.length > HISTORY) fhist.shift();
-  }
-  drawFrames();
+function chart(el, series, max, label) {
+  const width = Math.max(240, el.clientWidth || 940), right = width - 8, n = HISTORY - 1;
+  const y = v => 125 - Math.max(0, Math.min(max, v)) / max * 112;
+  const paths = series.map(([cls, pts]) => {
+    let d = "", pen = false;
+    const off = HISTORY - pts.length;
+    pts.forEach((v, i) => {
+      if (!finite(v)) { pen = false; return; }               // a gap, never a zero
+      d += `${pen ? "L" : "M"}${(40 + (off + i) * (right - 40) / n).toFixed(1)},${y(v).toFixed(1)} `;
+      pen = true;
+    });
+    return d ? `<path class="${cls}" d="${d}"/>` : "";
+  }).join("");
+  const grid = [0, max / 2, max].map(v => `<line class="grid" x1="40" x2="${right}" y1="${y(v)}" y2="${y(v)}"/><text x="0" y="${y(v) + 4}">${v}</text>`).join("");
+  el.innerHTML = `<svg class="chart" viewBox="0 0 ${width} 155" role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>${grid}${paths}<text x="40" y="151">−5 min</text><text x="${right - 32}" y="151">Now</text></svg>`;
 }
 
 function render(s) {
-  if (!s || s.time === undefined) return;
-  $("status").textContent = s.attached ? `attached to ${s.process} (pid ${s.pid}), ${s.sampleHz === 0 ? "main-thread breakdown off" : s.mainThreadSamples + " samples this tick"}` : "waiting for the game";
-  const v = $("verdict");
-  v.textContent = s.verdict.label;
-  v.style.background = css(verdictColor[s.verdict.label] || "--idle");
-  $("verdictReason").textContent = s.verdict.reason + (s.note ? "  ·  " + s.note : "");
-  const num = x => (typeof x === "number") ? x : NaN;
-  $("tMain").textContent = fmt(num(s.mainThreadBusyPct)) + "%";
-  $("tGpu").textContent = fmt(num(s.gpu3DPct)) + "%";
-  $("tCpu").textContent = fmt(num(s.processCpuPct)) + "%";
-  $("tCores").textContent = `of ${s.cores} logical cores`;
-  $("tVram").textContent = isFinite(num(s.gpuDedicatedMb)) ? fmt(num(s.gpuDedicatedMb) / 1024, 1) + " GB" : "-";
-  $("tRam").textContent = fmt(num(s.workingSetMb) / 1024, 1) + " GB";
-  $("tPriv").textContent = `working set (private ${fmt(num(s.privateMb) / 1024, 1)} GB)`;
-  if (s.attached) {
-    hist.push({ t: s.time, main: num(s.mainThreadBusyPct), gpu: num(s.gpu3DPct) });
-    while (hist.length > HISTORY) hist.shift();
+  last = s;
+  const st = stateOf(s), active = s.attached && connected, full = st === "full", f = s.frames;
+  const copy = verdictCopy[s.attached ? s.verdict.label : "waiting"] || verdictCopy.unknown;
+  if (st === "disconnected") {
+    $("verdict").textContent = "Connection lost";
+    $("reason").textContent = (lastTime ? "The last readings below are from " + lastTime.toLocaleTimeString() + ". " : "") + "Waiting to reconnect to the PC running " + PRODUCT + ".";
+  } else {
+    $("verdict").textContent = copy[0];
+    $("reason").textContent = copy[1] + (s.attached && !full ? " This is an estimate from current loads." : "");
   }
-  draw();
-  renderFrames(s);
-  $("mods").innerHTML = (s.mainThreadModules || []).slice(0, 14).map(m =>
-    `<tr class="${esc(m.kind)}"><td>${esc(m.name)}</td><td class="kind">${esc(m.kind)}</td><td><div class="bar" style="width:${Math.max(0.5, m.percent)}%"></div></td><td class="num">${fmt(m.percent, 1)}%</td></tr>`).join("")
-    || `<tr><td colspan="4" class="kind">${s.sampleHz === 0 ? "off: it briefly pauses the game hundreds of times a second. Start it with --sample-hz 250 to see it." : "no samples"}</td></tr>`;
-  $("threads").innerHTML = (s.topThreads || []).map(t =>
-    `<tr><td>${t.main ? "<b>main</b> " : ""}${t.tid}</td><td><div class="bar" style="width:${Math.max(0.5, t.busyPct)}%"></div></td><td class="num">${fmt(t.busyPct)}%</td></tr>`).join("");
-  const f = s.fsp;
-  if (!f || !f.present) { $("fsp").textContent = "FSPluginHost not found (no fsp\\fsp.status.xml in the profile folder)."; return; }
-  const rows = f.plugins.map(p => {
-    const fields = Object.entries(p.fields || {}).map(([k, val]) => `<code>${esc(k)}=${esc(val)}</code>`).join(" ");
-    return `<tr><td>${esc(p.name)}</td><td>${esc(p.version)}</td><td class="${p.state === "active" ? "state-active" : "state-other"}">${esc(p.state)}${p.reason ? " – " + esc(p.reason) : ""}</td><td>${fields}</td></tr>`;
-  }).join("");
-  $("fsp").innerHTML = `<div>Host ${esc(f.version)}, channel ${esc(f.channel)}, ${esc(f.build)}${f.services.length ? ", services: " + f.services.map(esc).join(", ") : ""}</div>
-    <table><thead><tr><th>Plugin</th><th>Version</th><th>State</th><th>Counters it publishes</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $("game-status").innerHTML = `<i class="dot ${!active ? "wait" : ""}" aria-hidden="true"></i>${st === "disconnected" ? "Reconnecting…" : active ? "Watching the game" : "Ready when you are"}`;
+  $("mode").textContent = full ? "Frame times on" : "Loads only";
+  $("fps").textContent = full ? number(f.fps) : "—";
+  $("low").textContent = full ? number(f.low1PctFps) : "—";
+  $("ft").innerHTML = full ? `${number(f.frameTimeAvgMs)} <span class="unit">ms</span>` : "—";
+
+  const b = banners[st];
+  $("frame-banner").hidden = !b;
+  if (b) $("frame-banner").innerHTML = `<span class="symbol" aria-hidden="true">ⓘ</span><div><strong>${esc(b[0])}</strong><p class="small">${esc(b[1])}</p></div>${b[2] ? `<div class="actions"><a class="button primary" href="${b[3]}">${esc(b[2])}</a></div>` : ""}`;
+
+  // frame-time trend (only with frame times)
+  $("trend").hidden = !frameHist.some(p => finite(p[0]));
+  if (!$("trend").hidden) {
+    const maxFt = Math.max(40, Math.ceil(Math.max(...frameHist.map(p => finite(p[0]) ? p[0] : 0)) / 10) * 10);
+    chart($("frame-chart"), [["frame", frameHist.map(p => p[0])], ["cpu", frameHist.map(p => p[1])], ["gpu", frameHist.map(p => p[2])]], maxFt, "Frame times in milliseconds, last 5 minutes");
+    $("trend-summary").textContent = full ? `Now: average ${number(f.frameTimeAvgMs)} ms · slowest 1% boundary ${number(f.frameTimeP99Ms)} ms.` : "No frame times right now.";
+  }
+
+  // Advanced
+  $("process").textContent = s.attached ? `${s.process} · PID ${s.pid}` : "No game connected";
+  $("loads").innerHTML =
+    readout("Main thread busy", s.attached ? fmt(s.mainThreadBusyPct, "%") : "—", "Of one logical core") +
+    readout("GPU 3D", s.attached ? fmt(s.gpu3DPct, "%") : "—", "Busiest 3D engine") +
+    readout("Game CPU", s.attached ? fmt(s.processCpuPct, "%") : "—", `Across ${s.cores} logical cores`) +
+    readout("VRAM · game", s.attached ? fmt(finite(s.gpuDedicatedMb) ? s.gpuDedicatedMb / 1024 : null, "GiB") : "—", "Dedicated graphics memory") +
+    readout("RAM · game", s.attached ? fmt(finite(s.workingSetMb) ? s.workingSetMb / 1024 : null, "GiB") : "—", "Working set") +
+    readout("Private memory", s.attached ? fmt(finite(s.privateMb) ? s.privateMb / 1024 : null, "GiB") : "—", "Committed private bytes");
+  if ($("advanced").open) {
+    if (loadHist.length) chart($("load-chart"), [["cpu", loadHist.map(p => p[0])], ["gpu", loadHist.map(p => p[1])]], 100, "Processor and graphics load in percent, last 5 minutes");
+    else $("load-chart").innerHTML = '<p class="meta" style="padding-block:24px">The trend will begin when the game starts.</p>';
+  }
+  const fields = [["CPU busy / frame", "cpuBusyMs"], ["CPU wait / frame", "cpuWaitMs"], ["GPU busy / frame", "gpuBusyMs"], ["GPU wait / frame", "gpuWaitMs"], ["GPU latency", "gpuLatencyMs"], ["Display latency", "displayLatencyMs"], ["Median frame time · p50", "frameTimeP50Ms"], ["Slowest 1% boundary · p99", "frameTimeP99Ms"]];
+  $("frame-details").innerHTML = fields.map(([l, k]) => readout(l, full ? fmt(f[k], "ms") : "—")).join("") +
+    readout("Frames this interval", full ? number(f.frames, 0) : "—") +
+    readout("Presentation / runtime", full ? `${f.presentMode || "—"} / ${f.runtime || "—"}` : "—");
+  $("capture-note").textContent = `Capture: ${f ? f.state : "disabled"}${f && f.hint ? " · " + f.hint : ""}. ${s.elevated ? "Full Windows permissions" : "Standard Windows permissions"}.`;
+  const mods = s.mainThreadModules || [];
+  $("modules").innerHTML = mods.length
+    ? mods.map(m => `<tr><td>${esc(m.name)}<div class="meta">${esc(m.kind)}</div></td><td class="numeric">${number(m.percent)}%<div class="meta">${esc(m.samples)} samples</div></td></tr>`).join("")
+    : `<tr><td colspan="2">${!s.attached ? "No samples while waiting for the game." : s.sampleHz === 0 ? "Off. Turn on “Show what the game’s main loop spends time on” in Settings to see this." : "No samples."}</td></tr>`;
+  $("sampling").textContent = s.sampleHz === 0 ? "The main-loop breakdown is off." : `${s.mainThreadSamples} samples this interval. Shares reflect sampled wall time, including waits.`;
+  const threads = s.topThreads || [];
+  $("threads").innerHTML = threads.length ? threads.map(t => `<tr><td>${esc(t.tid)}${t.main ? " · main" : ""}</td><td class="numeric">${number(t.busyPct)}%</td></tr>`).join("") : '<tr><td colspan="2">No thread readings yet.</td></tr>';
+  const host = s.fsp || { present: false };
+  $("host").textContent = host.present ? `Host ${host.version} · channel ${host.channel} · build ${host.build}` : "FSPluginHost was not found. " + PRODUCT + " works without it.";
+  $("host-written").textContent = host.present && host.written ? `${!s.attached ? "Saved status; this does not mean the game is running. " : ""}Status file written ${new Date(host.written).toLocaleString()}.` : "";
+  $("plugins").innerHTML = (host.plugins || []).map(p => `<article class="plugin"><h3>${esc(p.name)}</h3><div class="row" style="margin-top:6px"><span class="meta">Version ${esc(p.version)}</span><span class="tag">${esc(p.state)}</span></div>${p.reason ? `<p class="small" style="margin-top:8px">${esc(p.reason)}</p>` : ""}<div class="plugin-fields">${Object.entries(p.fields || {}).map(([k, v]) => `<code>${esc(k)}=${esc(v)}</code>`).join("")}</div></article>`).join("");
+  $("services").textContent = host.present ? "Services: " + ((host.services || []).length ? host.services.join(" · ") : "None reported") : "";
+  $("diagnostics").textContent = `Snapshot ${s.time} · Mode ${s.mode} · Attached ${s.attached} · Verdict ${s.verdict.label}: ${s.verdict.reason}${s.note ? " · " + s.note : ""}`;
 }
 
-function connect() {
-  const es = new EventSource("/events");
-  es.onmessage = e => { try { render(JSON.parse(e.data)); } catch (_) {} };
-  es.onerror = () => { $("status").textContent = "SVS Performance Monitor not running? reconnecting..."; es.close(); setTimeout(connect, 2000); };
+function onSnapshot(s) {
+  if (!s || s.time === undefined) return;
+  lastTime = new Date(s.time);
+  if (!s.attached) { frameHist = []; loadHist = []; }      // a new game run starts a new trend
+  else {
+    const f = s.frames, ok = f && f.state === "running" && f.frames > 0;
+    frameHist.push(ok ? [f.frameTimeAvgMs, f.cpuBusyMs, f.gpuBusyMs] : [NaN, NaN, NaN]);
+    loadHist.push([s.mainThreadBusyPct, s.gpu3DPct]);
+    if (frameHist.length > HISTORY) frameHist.shift();
+    if (loadHist.length > HISTORY) loadHist.shift();
+  }
+  render(s);
 }
-window.addEventListener("resize", () => { draw(); drawFrames(); });
+
+let es = null;
+function connect() {
+  es = new EventSource("/events");
+  es.onopen = () => { connected = true; };
+  es.onmessage = e => { connected = true; try { onSnapshot(JSON.parse(e.data)); } catch { } };
+  es.onerror = () => { connected = false; if (last) render(last); else { $("verdict").textContent = "Connecting…"; } es.close(); setTimeout(connect, 2000); };
+}
 connect();
+$("advanced").addEventListener("toggle", () => { if (last) render(last); });
+window.addEventListener("resize", () => { if (last) render(last); });
 </script>
-</body>
-</html>
+</body></html>

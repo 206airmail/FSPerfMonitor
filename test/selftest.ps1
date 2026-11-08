@@ -238,7 +238,7 @@ $srv = Start-Process $exe -ArgumentList '--no-browser', '--no-frames', '--profil
 try {
     Start-Sleep -Milliseconds 1200
     $page = (curl.exe -s http://127.0.0.1:8799/log) -join "`n"
-    Check ($page -match '<title>SVS Performance Monitor log</title>' -and $page -match 'href="/"') "GET /log serves the log page (links back to the dashboard)"
+    Check ($page -match 'Game log</title>' -and $page -match 'href="/"') "GET /log serves the log page (links back to the dashboard)"
     Check (((curl.exe -s http://127.0.0.1:8799/) -join "`n") -match 'href="/log"') "the dashboard links to /log"
     $first = (curl.exe -siN --max-time 2 'http://127.0.0.1:8799/log/stream?n=10') -join "`n"
     Check ($first -match 'text/event-stream' -and $first -match '"reset":true' -and $first -match 'first line' -and $first -match 'Warning: something odd') "stream: a new client gets the recent lines first"

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark light">
+<title>SVS Performance Monitor · Welcome</title><link rel="icon" href="/favicon.png" type="image/png"><link rel="stylesheet" href="/assets/styles.css">
+<!-- First-run welcome (0.5, #8). Design: design/welcome.html. The tray app opens it on its first start (settings
+     welcomeShown = false). Continuing saves the start-with-Windows choice and welcomeShown, even when the frame-times
+     setup is skipped (spec). Never signs anyone out by itself. -->
+</head>
+<body data-page="welcome"><a class="skip" href="#main">Skip to content</a>
+<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a href="/">Dashboard</a><a href="/log">Game log</a><a href="/settings">Settings</a></nav></div></header>
+<main id="main" class="wrap welcome"><section class="card"><div class="eyebrow">Welcome · SimVizion Studios</div><h1>Know what holds your game back.</h1>
+<p class="welcome-intro">SVS Performance Monitor shows whether your processor or graphics card is limiting Farming Simulator 25. It watches from outside the game, so nothing is added to the game.</p>
+<div class="feature"><h2>See FPS and spot stutter</h2><p id="welcome-setup-text">Set up frame times to see how smoothly the game runs. Windows will ask for permission once, then sign out and back in.</p>
+<div class="row"><button class="primary" id="welcome-setup" type="button">Set up frame times</button><span class="small" id="welcome-status" role="status">You can also do this later in Settings.</span></div></div>
+<label class="choice"><input type="checkbox" id="welcome-startup">Start SVS Performance Monitor when Windows starts</label>
+<div class="row between"><p class="small">SVS Performance Monitor stays in the notification area while it runs.</p><a class="button" href="/" id="continue">Open dashboard →</a></div>
+</section></main>
+<footer class="wrap footer"><span>SimVizion Studios · SVS Performance Monitor</span><span>Watches the game from outside. Nothing is added to the game.</span></footer>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let view = null;
+
+function frameState(state) {
+  const ready = state === "ready", signout = state === "signout", missing = state === "missing";
+  $("welcome-setup").hidden = ready || signout || missing || !(view && view.canEdit);
+  $("welcome-status").textContent =
+    ready ? "Frame times are ready on this PC." :
+    signout ? "One more step: sign out of Windows and back in to finish setting up frame times." :
+    missing ? "The frame-times tool is missing. Check the files that came with SVS Performance Monitor." :
+    state === "cancelled" ? "Permission was cancelled. No changes were made. You can try again here or later in Settings." :
+    state === "failure" ? "Frame times could not be set up. You can try again later in Settings." :
+    "You can also do this later in Settings.";
+}
+
+fetch("/api/settings", { cache: "no-store" }).then(r => r.json()).then(v => {
+  view = v;
+  $("welcome-startup").checked = v.settings.startWithWindows;
+  $("welcome-startup").disabled = !v.canEdit;
+  frameState(v.frameTimes);
+}).catch(() => { });
+
+$("welcome-setup").onclick = async () => {
+  if (!view || !view.canEdit) return;
+  $("welcome-setup").disabled = true;
+  $("welcome-status").textContent = "Windows will ask for permission…";
+  try {
+    const r = await fetch("/api/frametimes-setup", { method: "POST", headers: { "Content-Type": "application/json", "X-SVS-Token": view.token }, body: "{}" });
+    frameState(r.ok ? await r.json() : "failure");
+  } catch { frameState("failure"); }
+  finally { $("welcome-setup").disabled = false; }
+};
+
+// continuing saves the choice (and that the welcome was seen), then opens the dashboard
+$("continue").onclick = async e => {
+  if (!view || !view.canEdit) return;   // a phone just follows the link
+  e.preventDefault();
+  const s = Object.assign({}, view.settings, { startWithWindows: $("welcome-startup").checked, welcomeShown: true });
+  try {
+    const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json", "X-SVS-Token": view.token }, body: JSON.stringify(s) });
+    if (!r.ok) { $("welcome-status").textContent = await r.json(); return; }
+  } catch { }
+  location.href = "/";
+};
+</script>
+</body></html>

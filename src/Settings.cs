@@ -13,6 +13,7 @@ public sealed class AppSettings
     public int Port { get; set; } = 8765;
     public bool StartWithWindows { get; set; }              // #7: Run entry, or the task's logon trigger with full permissions
     public bool RunWithFullPermissions { get; set; }        // #7: the scheduled task (highest privileges)
+    public bool WelcomeShown { get; set; }                  // #8: the first start opens /welcome instead of the dashboard
     public string UserCopy { get; set; } = "";              // the user's own starter (not the protected copy): the Run entry's target
 
     public AppSettings Clone() => (AppSettings)MemberwiseClone();

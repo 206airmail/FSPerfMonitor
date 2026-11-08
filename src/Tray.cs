@@ -32,6 +32,7 @@ public static unsafe class TrayApp
     private static AppSettings s_settings = new();
     private static readonly object s_settingsLock = new();   // s_settings: short holds only (HTTP workers, the UI thread)
     private static readonly object s_saveLock = new();       // one save at a time, incl. its Windows permission prompt
+    private static int s_restartNeeded;                       // set by a save that changed what the monitor uses
     private static readonly SettingsBackend s_backend = new();
 
     // the Settings page's side in the tray app: save to the file, then restart the monitor with them (on the window's thread)
@@ -55,6 +56,9 @@ public static unsafe class TrayApp
                     try { SettingsStore.Save(s); } catch (Exception e) { return "Could not save the settings: " + e.Message; }
                     s_settings = s;
                 }
+                bool restart = was.Port != s.Port || was.MainLoopBreakdown != s.MainLoopBreakdown || was.ProfileFolder != s.ProfileFolder
+                    || was.RunWithFullPermissions != s.RunWithFullPermissions;
+                if (restart) Interlocked.Exchange(ref s_restartNeeded, 1);
             }
             return null;
         }
@@ -65,7 +69,9 @@ public static unsafe class TrayApp
             int r = AutoStart.Admin($"perflog {AutoStart.CurrentUserSid()}");
             return r == AutoStart.ExitOk ? AutoStart.FrameTimesAccess() : r == AutoStart.ExitCancelled ? "cancelled" : "failure";
         }
-        public void Saved() => TrayNative.PostMessageW(s_hwnd, WM_SETTINGS_SAVED, IntPtr.Zero, IntPtr.Zero);
+        // a restart only when the monitor itself uses what changed (the welcome flag or start with Windows: no reason to
+        // drop the live dashboard)
+        public void Saved() { if (Interlocked.Exchange(ref s_restartNeeded, 0) == 1) TrayNative.PostMessageW(s_hwnd, WM_SETTINGS_SAVED, IntPtr.Zero, IntPtr.Zero); }
     }
 
     // the options for this run: the settings file, then the tray app's own command line (e.g. --lan) on top
@@ -210,7 +216,7 @@ public static unsafe class TrayApp
             }) { IsBackground = true, Name = "svsperf-tray-events" };
             watcher.Start();
             try {
-                if (!o.NoBrowser) OpenUrl(s_host.Url);
+                if (!o.NoBrowser) OpenUrl(s_host.Url + (s_settings.WelcomeShown ? "" : "welcome"));   // the very first start: the welcome
 
                 TrayNative.MSG msg;
                 while (TrayNative.GetMessageW(&msg, IntPtr.Zero, 0, 0) > 0) {

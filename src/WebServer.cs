@@ -55,9 +55,13 @@ public sealed class WebServer : IDisposable
         using var ms3 = new MemoryStream();
         s3.CopyTo(ms3);
         _settingsPage = ms3.ToArray();
+        using var s4 = Assembly.GetExecutingAssembly().GetManifestResourceStream("welcome.html")!;
+        using var ms4 = new MemoryStream();
+        s4.CopyTo(ms4);
+        _welcomePage = ms4.ToArray();
     }
 
-    private readonly byte[] _settingsPage;
+    private readonly byte[] _settingsPage, _welcomePage;
 
     public void Start()
     {
@@ -113,6 +117,7 @@ public sealed class WebServer : IDisposable
                 return;
             }
             if (route == "/settings") { Send(stream, 200, "text/html; charset=utf-8", _settingsPage); c.Close(); return; }
+            if (route == "/welcome") { Send(stream, 200, "text/html; charset=utf-8", _welcomePage); c.Close(); return; }
             if (Assets.TryGetValue(route, out var asset)) { Send(stream, 200, asset.Type, asset.Body, cache: true); c.Close(); return; }
             if (path == "/events") {
                 // reserve a live-view slot atomically (check + reserve under one lock), released when registered or failed

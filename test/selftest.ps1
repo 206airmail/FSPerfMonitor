@@ -10,6 +10,8 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 $exe = if ($Exe) { (Resolve-Path $Exe).Path } else { Join-Path $root 'src\bin\Release\net10.0-windows\win-x64\SVSPerfMonitor.exe' }
 if (-not (Test-Path $exe)) { Write-Host "build first: $exe missing"; exit 2 }
+# every tray app the test starts uses its own settings file: never the user's real %APPDATA% one
+$testSettings = Join-Path $env:TEMP ('svsperf_selftest_tray_' + [guid]::NewGuid().ToString('N').Substring(0, 6) + '.json')
 $fails = 0
 function Check([bool]$ok, [string]$what) {
     if ($ok) { Write-Host "  ok   $what" } else { Write-Host "  FAIL $what" -ForegroundColor Red; $script:fails++ }
@@ -96,12 +98,12 @@ Check ($mon.HasExited -and $mon.ExitCode -eq 0 -and "$err" -notmatch 'Unhandled 
 # 0.4 tray app (#5), under its own instance name and port (never a real running copy): one copy only, a clean --exit
 $inst = 'SVSPerfSelfTest_' + [guid]::NewGuid().ToString('N').Substring(0, 6)
 # (--tray-child: the tray itself, never its console-less restart, so $t1 is the process that runs on every Windows)
-$t1 = Start-Process $exe -ArgumentList '--tray', '--tray-child', '--no-browser', '--no-frames', '--port', '8798', '--instance', $inst -PassThru
+$t1 = Start-Process $exe -ArgumentList '--tray', '--tray-child', '--no-browser', '--no-frames', '--port', '8798', '--instance', $inst, '--settings', "`"$testSettings`"" -PassThru
 $null = $t1.Handle
 $up = $false
 for ($i = 0; $i -lt 40 -and -not $up; $i++) { Start-Sleep -Milliseconds 250; try { $null = Invoke-WebRequest 'http://127.0.0.1:8798/api/snapshot' -UseBasicParsing -TimeoutSec 2; $up = $true } catch { } }
 Check ($up -and -not $t1.HasExited) "tray app: running, dashboard answers on its port"
-$t2 = Start-Process $exe -ArgumentList '--tray', '--tray-child', '--no-browser', '--no-frames', '--port', '8798', '--instance', $inst -PassThru
+$t2 = Start-Process $exe -ArgumentList '--tray', '--tray-child', '--no-browser', '--no-frames', '--port', '8798', '--instance', $inst, '--settings', "`"$testSettings`"" -PassThru
 $null = $t2.Handle
 Check ($t2.WaitForExit(5000) -and $t2.ExitCode -eq 0 -and -not $t1.HasExited) "tray app: a second start leaves the first one running and exits (exit $($t2.ExitCode))"
 $ex = & $exe --exit --instance $inst
@@ -200,7 +202,7 @@ Remove-Item $sf -ErrorAction SilentlyContinue
 $starter = [IO.Path]::ChangeExtension($exe, '.exe')
 if ($exe -like '*.com' -and (Test-Path $starter)) {
     $inst = 'SVSPerfSelfTest_' + [guid]::NewGuid().ToString('N').Substring(0, 6)
-    $s = Start-Process $starter -ArgumentList '--tray', '--no-browser', '--no-frames', '--port', '8798', '--instance', $inst -PassThru
+    $s = Start-Process $starter -ArgumentList '--tray', '--no-browser', '--no-frames', '--port', '8798', '--instance', $inst, '--settings', "`"$testSettings`"" -PassThru
     $null = $s.Handle
     $sOk = $s.WaitForExit(5000) -and $s.ExitCode -eq 0
     Start-Sleep -Milliseconds 1500
@@ -302,6 +304,7 @@ try {
     Remove-Item $prof -Recurse -ErrorAction SilentlyContinue
 }
 
+Remove-Item $testSettings -ErrorAction SilentlyContinue
 if ($fails) { Write-Host "SVSPERFMONITOR SELFTEST: $fails failure(s)"; exit 1 }
 Write-Host "SVSPERFMONITOR SELFTEST OK"
 exit 0

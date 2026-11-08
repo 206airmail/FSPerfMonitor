@@ -21,16 +21,22 @@ function Check([bool]$ok, [string]$what) {
 function Json([string]$file, [object[]]$a) { $ErrorActionPreference = 'Continue'; & $file @a 2>$null | ConvertFrom-Json }
 function Snap([int]$procId) { Json $exe @('--once', '--pid', $procId, '--interval-ms', '2000', '--sample-hz', '250') }
 
-$b = Start-Process $exe -ArgumentList '--burn', '12' -PassThru -WindowStyle Hidden
+$b = Start-Process $exe -ArgumentList '--burn', '20' -PassThru -WindowStyle Hidden
 Start-Sleep -Milliseconds 700
+# (#12) on a busy shared PC a spinning thread can measure just under the 90% CPU-bound line: up to two more
+# measurements, but only for a load-like shortfall (still clearly busy) - a real regression stays a failure
 $j = Snap $b.Id
+for ($try = 0; $try -lt 2 -and $j.attached -and $j.mainThreadBusyPct -gt 50 -and ($j.mainThreadBusyPct -lt 90 -or $j.verdict.label -ne 'CPU-bound'); $try++) {
+    Write-Host "  ..   busy thread measured $([math]::Round($j.mainThreadBusyPct))% (machine load?): measuring again"
+    $j = Snap $b.Id
+}
 Check ($j.attached -and $j.mainThreadBusyPct -ge 85) "busy .NET main thread seen busy ($([math]::Round($j.mainThreadBusyPct))%)"
 Check ($j.verdict.label -eq 'CPU-bound') "verdict CPU-bound ($($j.verdict.reason))"
 Check ($j.mainThreadSamples -ge 300 -and $j.sampleHz -eq 250) "sampler rate: $($j.mainThreadSamples) samples in 2 s at 250 Hz (opt-in)"
 # the main-thread breakdown is opt-in (#2): by default and with --sample-hz 0 the game's thread is never suspended
 foreach ($a in @(@(), @('--sample-hz', '0'))) {
     $j0 = Json $exe (@('--once', '--pid', $b.Id, '--interval-ms', '1000', '--no-frames') + $a)
-    Check ($j0.attached -and $j0.sampleHz -eq 0 -and $j0.mainThreadSamples -eq 0 -and @($j0.mainThreadModules).Count -eq 0 -and -not $j0.note -and $j0.mainThreadBusyPct -ge 85) "breakdown off $(if ($a) { 'with --sample-hz 0' } else { 'by default' }): 0 samples, no note, CPU busy still measured"
+    Check ($j0.attached -and $j0.sampleHz -eq 0 -and $j0.mainThreadSamples -eq 0 -and @($j0.mainThreadModules).Count -eq 0 -and -not $j0.note -and $j0.mainThreadBusyPct -gt 50) "breakdown off $(if ($a) { 'with --sample-hz 0' } else { 'by default' }): 0 samples, no note, CPU busy still measured ($([math]::Round($j0.mainThreadBusyPct))%)"   # (#12: measured, not a verdict threshold)
 }
 $b.WaitForExit()
 

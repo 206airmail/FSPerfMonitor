@@ -84,7 +84,7 @@ public sealed class WebServer : IDisposable
             string? line = ReadLineBounded(stream, 2048, deadline);
             if (line == null) { c.Close(); return; }
             int headers = 0, contentLength = 0;
-            string lastEventId = "", hostHeader = "", origin = "", contentType = "";
+            string lastEventId = "", hostHeader = "", origin = "", contentType = "", saveToken = "";
             while (true) {
                 string? h = ReadLineBounded(stream, 8192, deadline);
                 if (h == null || ++headers > 100) { c.Close(); return; }
@@ -93,6 +93,7 @@ public sealed class WebServer : IDisposable
                 else if (h.StartsWith("Host:", StringComparison.OrdinalIgnoreCase)) hostHeader = h[5..].Trim();
                 else if (h.StartsWith("Origin:", StringComparison.OrdinalIgnoreCase)) origin = h[7..].Trim();
                 else if (h.StartsWith("Content-Type:", StringComparison.OrdinalIgnoreCase)) contentType = h[13..].Trim();
+                else if (h.StartsWith("X-SVS-Token:", StringComparison.OrdinalIgnoreCase)) saveToken = h[12..].Trim();
                 else if (h.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase)) int.TryParse(h[15..].Trim(), out contentLength);
             }
             if (hostHeader.Length == 0) { Send(stream, 400, "text/plain", Encoding.ASCII.GetBytes("Host header required")); c.Close(); return; }
@@ -100,7 +101,7 @@ public sealed class WebServer : IDisposable
             string path = line.Split(' ').ElementAtOrDefault(1) ?? "/";
             string route = path.Split('?')[0];
             if (line.StartsWith("POST ") && route == "/api/settings") {
-                HandleSaveSettings(c, stream, origin, contentType, contentLength, deadline);
+                HandleSaveSettings(c, stream, origin, contentType, saveToken, contentLength, deadline);
                 c.Close();
                 return;
             }
@@ -130,7 +131,7 @@ public sealed class WebServer : IDisposable
                     var w = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
                     w.Write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n");
                     w.Write($"data: {_last}\n\n");
-                    lock (_lock) { _reserved--; _clients.Add(w); added = true; }
+                    lock (_lock) { _reserved--; added = true; if (!_stop) _clients.Add(w); else { try { w.Dispose(); } catch { } } }
                 } finally {
                     if (!added) lock (_lock) _reserved--;
                 }
@@ -238,7 +239,7 @@ public sealed class WebServer : IDisposable
             var cl = new LogClient(c, stream);
             bool full = false;
             lock (tail.Gate) {            // snapshot + register under one lock (no I/O in here): no gap, no duplicate
-                if (_logClients.Count >= MaxLogClients) full = true;
+                if (_logClients.Count >= MaxLogClients || _stop) full = true;   // stopping: no new viewers
                 else {
                     if (resumed && afterSeq > tail.LastSeq) { afterSeq = -1; resumed = false; }
                     var lines = tail.Snapshot(afterSeq, n, out bool gap);
@@ -380,6 +381,15 @@ public sealed class WebServer : IDisposable
     private static bool IsLocal(TcpClient c) =>
         c.Client.RemoteEndPoint is IPEndPoint ep && IPAddress.IsLoopback(ep.Address.IsIPv4MappedToIPv6 ? ep.Address.MapToIPv4() : ep.Address);
 
+    // a second lock besides the Origin: a random token per server start that only this PC's Settings page can read (GET
+    // /api/settings gives it to local viewers; other sites can't read that answer without CORS, which this server never
+    // allows), sent back in the X-SVS-Token header
+    private readonly string _saveToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
+
+    private bool TokenMatches(string token) =>
+        token.Length == _saveToken.Length &&
+        System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(token), Encoding.ASCII.GetBytes(_saveToken));
+
     private bool OriginIsThisDashboard(string origin) =>
         origin == $"http://127.0.0.1:{_port}" || origin == $"http://localhost:{_port}" || origin == $"http://[::1]:{_port}";
 
@@ -388,12 +398,13 @@ public sealed class WebServer : IDisposable
         var b = Settings;
         string why = b == null ? "These settings belong to the tray app. This copy was started from the command line."
             : !local ? "Settings can be changed on the PC running SVS Performance Monitor." : "";
-        var view = new SettingsView(b?.Current ?? new AppSettings(), b != null && local, why, SettingsStore.DefaultProfileFolder,
-            Program.Version, $"http://127.0.0.1:{_port}/");
+        bool canEdit = b != null && local;
+        var view = new SettingsView(b?.Current ?? new AppSettings(), canEdit, why, SettingsStore.DefaultProfileFolder,
+            Program.Version, $"http://127.0.0.1:{_port}/", canEdit ? _saveToken : "");
         return System.Text.Json.JsonSerializer.Serialize(view, FsperfJson.Default.SettingsView);
     }
 
-    private void HandleSaveSettings(TcpClient c, NetworkStream stream, string origin, string contentType, int length, DateTime deadline)
+    private void HandleSaveSettings(TcpClient c, NetworkStream stream, string origin, string contentType, string token, int length, DateTime deadline)
     {
         byte[] Err(string msg) => Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(msg, FsperfJson.Default.String));
         if (length <= 0 || length > 16 * 1024) {
@@ -410,7 +421,7 @@ public sealed class WebServer : IDisposable
             if (n <= 0) return;
             got += n;
         }
-        if (!IsLocal(c) || !OriginIsThisDashboard(origin)) { Send(stream, 403, "application/json", Err("Settings can be changed on the PC running SVS Performance Monitor.")); return; }
+        if (!IsLocal(c) || !OriginIsThisDashboard(origin) || !TokenMatches(token)) { Send(stream, 403, "application/json", Err("Settings can be changed on the PC running SVS Performance Monitor.")); return; }
         if (!contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase)) { Send(stream, 415, "application/json", Err("JSON only")); return; }
         if (Settings == null) { Send(stream, 409, "application/json", Err("These settings belong to the tray app. This copy was started from the command line.")); return; }
         AppSettings? s;
@@ -458,10 +469,21 @@ public sealed class WebServer : IDisposable
         }
     }
 
+    // also closes every open live view (dashboard and log): their browsers reconnect, to the restarted server after a
+    // settings change, instead of hanging on to this one
     public void Dispose()
     {
         _stop = true;
         if (_tail != null) { _tail.Appended -= OnLogAppended; _tail.Heartbeat -= OnLogHeartbeat; }
         try { _listener.Stop(); } catch { }
+        lock (_lock) {
+            foreach (var w in _clients) { try { w.Dispose(); } catch { } }
+            _clients.Clear();
+        }
+        if (_tail != null) {
+            List<LogClient> logs;
+            lock (_tail.Gate) { logs = [.. _logClients]; _logClients.Clear(); }
+            foreach (var cl in logs) cl.Close();   // outside the gate: closing does I/O
+        }
     }
 }

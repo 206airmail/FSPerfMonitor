@@ -13,11 +13,18 @@ public sealed class AppSettings
     public int Port { get; set; } = 8765;
 
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
+
+    // JSON can put null where C# says "never null" (a hand-edited file, a crafted request): make it the default
+    public AppSettings Normalized()
+    {
+        ProfileFolder ??= "";
+        return this;
+    }
 }
 
 // what GET /api/settings returns: the settings, whether this viewer may change them, and the facts the page shows
 public sealed record SettingsView(AppSettings Settings, bool CanEdit, string ReadOnlyReason, string DefaultProfileFolder,
-    string Version, string Url);
+    string Version, string Url, string Token);
 
 public static class SettingsStore
 {
@@ -33,25 +40,37 @@ public static class SettingsStore
     {
         try {
             if (File.Exists(FilePath))
-                return System.Text.Json.JsonSerializer.Deserialize(File.ReadAllText(FilePath), FsperfJson.Default.AppSettings) ?? new();
+                return (System.Text.Json.JsonSerializer.Deserialize(File.ReadAllText(FilePath), FsperfJson.Default.AppSettings) ?? new()).Normalized();
         } catch { }
         return new AppSettings();
     }
 
-    // write to a temp file, then replace: a crash or power loss never leaves half a file
+    // write to a temp file of its own, then replace: a crash or power loss never leaves half a file. Callers serialize saves.
     public static void Save(AppSettings s)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-        string tmp = FilePath + ".tmp";
-        File.WriteAllText(tmp, System.Text.Json.JsonSerializer.Serialize(s, FsperfJson.Default.AppSettings));
-        File.Move(tmp, FilePath, overwrite: true);
+        string tmp = $"{FilePath}.{Guid.NewGuid():N}.tmp";
+        try {
+            File.WriteAllText(tmp, System.Text.Json.JsonSerializer.Serialize(s, FsperfJson.Default.AppSettings));
+            File.Move(tmp, FilePath, overwrite: true);
+        } finally {
+            try { File.Delete(tmp); } catch { }   // gone already after a successful move
+        }
     }
 
     // null = valid; else the message the Settings page shows next to the field
     public static string? Validate(AppSettings s)
     {
         if (s.Port < 1 || s.Port > 65535) return "Enter a whole number from 1 to 65535.";
-        if (s.ProfileFolder.Length > 0 && !Directory.Exists(s.ProfileFolder)) return "That folder doesn't exist.";
+        if (s.ProfileFolder.Length > 0) {
+            // a folder on this PC only: a network or device path (\\server\share, \\?\, \\.\) would make even the existence
+            // check below connect to that server (and Windows may send the user's login to it)
+            string f = s.ProfileFolder;
+            bool localDrive = f.Length >= 3 && char.IsAsciiLetter(f[0]) && f[1] == ':' && (f[2] == '\\' || f[2] == '/');
+            if (!localDrive) return "Choose a folder on this PC, like C:\\Users\\you\\Documents\\My Games\\FarmingSimulator2025.";
+            try { if (new DriveInfo(f[..1]).DriveType == DriveType.Network) return "Choose a folder on this PC, not on a network drive."; } catch { }
+            if (!Directory.Exists(f)) return "That folder doesn't exist.";
+        }
         return null;
     }
 

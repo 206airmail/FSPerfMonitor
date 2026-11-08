@@ -30,25 +30,29 @@ public static unsafe class TrayApp
 
     private static string[] s_args = [];
     private static AppSettings s_settings = new();
+    private static readonly object s_settingsLock = new();   // saves come from HTTP worker threads, the fallback from the UI
     private static readonly SettingsBackend s_backend = new();
 
     // the Settings page's side in the tray app: save to the file, then restart the monitor with them (on the window's thread)
     private sealed class SettingsBackend : ISettingsBackend
     {
-        public AppSettings Current => s_settings.Clone();
+        public AppSettings Current { get { lock (s_settingsLock) return s_settings.Clone(); } }
         public string? Save(AppSettings s)
         {
+            s = s.Clone().Normalized();
             string? problem = SettingsStore.Validate(s);
             if (problem != null) return problem;
-            try { SettingsStore.Save(s); } catch (Exception e) { return "Could not save the settings: " + e.Message; }
-            s_settings = s.Clone();
+            lock (s_settingsLock) {   // file and memory change together, one save at a time
+                try { SettingsStore.Save(s); } catch (Exception e) { return "Could not save the settings: " + e.Message; }
+                s_settings = s;
+            }
             return null;
         }
         public void Saved() => TrayNative.PostMessageW(s_hwnd, WM_SETTINGS_SAVED, IntPtr.Zero, IntPtr.Zero);
     }
 
     // the options for this run: the settings file, then the tray app's own command line (e.g. --lan) on top
-    private static Options CurrentOptions() => SettingsStore.ToOptions(s_settings, s_args);
+    private static Options CurrentOptions() { lock (s_settingsLock) return SettingsStore.ToOptions(s_settings.Clone(), s_args); }
 
     public static int Run(string[] args)
     {
@@ -224,9 +228,13 @@ public static unsafe class TrayApp
         try {
             s_host = new MonitorHost(CurrentOptions(), s_backend);
         } catch (System.Net.Sockets.SocketException) {
-            int wanted = s_settings.Port;
-            s_settings.Port = oldPort;
-            try { SettingsStore.Save(s_settings); } catch { }
+            int wanted;
+            lock (s_settingsLock) {
+                wanted = s_settings.Port;
+                var back = s_settings.Clone(); back.Port = oldPort;
+                try { SettingsStore.Save(back); } catch { }
+                s_settings = back;
+            }
             TrayNative.MessageBoxW(IntPtr.Zero, $"Port {wanted} is already used by another program, so the dashboard stays on port {oldPort}.",
                 Title, TrayNative.MB_ICONWARNING);
             try { s_host = new MonitorHost(CurrentOptions(), s_backend); } catch { }

@@ -111,8 +111,8 @@ Check ($LASTEXITCODE -eq 1) "--exit with nothing running says so ('$ex2')"
 if (-not $t1.HasExited) { Stop-Process -Id $t1.Id -Force }
 
 # 0.4 settings (#6): the tray app with its own settings file (never the real one), own instance and ports
-function Post([string]$url, [string]$body, [string]$origin, [string]$ctype = 'application/json') {
-    $h = @{}; if ($origin) { $h['Origin'] = $origin }
+function Post([string]$url, [string]$body, [string]$origin, [string]$ctype = 'application/json', [string]$token = $script:tok) {
+    $h = @{}; if ($origin) { $h['Origin'] = $origin }; if ($token) { $h['X-SVS-Token'] = $token }
     try { $r = Invoke-WebRequest $url -Method Post -Body $body -ContentType $ctype -Headers $h -UseBasicParsing -TimeoutSec 5; return [int]$r.StatusCode }
     catch { if ($_.Exception.Response) { return [int]$_.Exception.Response.StatusCode } return -1 }
 }
@@ -120,11 +120,12 @@ function WaitUp([int]$port) { for ($i = 0; $i -lt 40; $i++) { try { return (Invo
 $sf = Join-Path $env:TEMP ('svsperf_selftest_settings_' + [guid]::NewGuid().ToString('N').Substring(0, 6) + '.json')
 '{"port":8798,"openDashboardOnStart":false,"mainLoopBreakdown":false}' | Set-Content $sf -Encoding ascii
 $inst = 'SVSPerfSelfTest_' + [guid]::NewGuid().ToString('N').Substring(0, 6)
-$stArgs = @('--tray', '--tray-child', '--no-frames', '--settings', $sf, '--instance', $inst) + @(if ($Lan) { '--lan' })
+$stArgs = @('--tray', '--tray-child', '--no-frames', '--settings', "`"$sf`"", '--instance', $inst)   # quoted: PS 5.1 joins -ArgumentList without quoting + @(if ($Lan) { '--lan' })
 $st = Start-Process $exe -ArgumentList $stArgs -PassThru
 $null = $st.Handle
 $v = WaitUp 8798
-Check ($v -and $v.canEdit -and $v.settings.port -eq 8798 -and -not $v.settings.openDashboardOnStart) "settings: the tray app reads its settings file; editable from this PC"
+$script:tok = $v.token
+Check ($v -and $v.canEdit -and $v.token.Length -eq 32 -and $v.settings.port -eq 8798 -and -not $v.settings.openDashboardOnStart) "settings: the tray app reads its settings file; editable from this PC"
 $page = try { (Invoke-WebRequest 'http://127.0.0.1:8798/settings' -UseBasicParsing).Content } catch { '' }
 $css = try { (Invoke-WebRequest 'http://127.0.0.1:8798/assets/styles.css' -UseBasicParsing).StatusCode } catch { 0 }
 Check ($page -match '<h1>Settings</h1>' -and $css -eq 200) "settings: the page and its style sheet are served"
@@ -134,6 +135,9 @@ Check ((Post "$good/api/settings" $body '') -eq 403) "settings: a save without a
 Check ((Post "$good/api/settings" $body 'http://evil.example') -eq 403) "settings: a save from another site's page is refused"
 Check ((Post "$good/api/settings" $body $good 'text/plain') -eq 415) "settings: a save that is not JSON is refused"
 Check ((Post "$good/api/settings" '{"port":70000}' $good) -eq 422) "settings: an impossible port is refused"
+Check ((Post "$good/api/settings" $body $good 'application/json' 'not-the-token') -eq 403) "settings: a save without this page's token is refused"
+Check ((Post "$good/api/settings" '{"port":8798,"profileFolder":"\\\\server\\share"}' $good) -eq 422) "settings: a network folder (\\server\share) is refused"
+Check ((Post "$good/api/settings" '{"port":70000,"profileFolder":null}' $good) -eq 422) "settings: a null folder is no crash (answered, not dropped)"
 $lanIp = if ($Lan) { (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.)' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -First 1).IPAddress }
 if ($lanIp) {
     $rv = try { (Invoke-WebRequest "http://${lanIp}:8798/api/settings" -UseBasicParsing -TimeoutSec 3).Content | ConvertFrom-Json } catch { $null }
@@ -141,7 +145,7 @@ if ($lanIp) {
 }
 Check ((Post "$good/api/settings" $body $good) -eq 200) "settings: a save from this PC's dashboard is accepted"
 Start-Sleep -Milliseconds 1500
-$null = WaitUp 8798
+$script:tok = (WaitUp 8798).token   # a restarted server has a new token
 $sn = $null; for ($i = 0; $i -lt 12 -and -not ($sn -and $sn.sampleHz -eq 250); $i++) { Start-Sleep -Milliseconds 500; $sn = try { (Invoke-WebRequest "$good/api/snapshot" -UseBasicParsing).Content | ConvertFrom-Json } catch { $null } }
 $saved = Get-Content $sf -Raw | ConvertFrom-Json
 Check ($saved.mainLoopBreakdown -eq $true -and $sn.sampleHz -eq 250) "settings: saved to the file and applied after the restart (breakdown on: $($sn.sampleHz) Hz)"

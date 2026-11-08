@@ -56,23 +56,28 @@ public static unsafe class TrayApp
             // named events from other copies (open the dashboard / quit) arrive on this thread, then go to the window
             var watcher = new Thread(() => {
                 var hs = new WaitHandle[] { openEvt, exitEvt, quitWatcher };
-                while (true) {
-                    int i = WaitHandle.WaitAny(hs);
-                    if (i == 2) return;
-                    TrayNative.PostMessageW(s_hwnd, i == 0 ? WM_OPEN_REQUEST : WM_EXIT_REQUEST, IntPtr.Zero, IntPtr.Zero);
-                    if (i == 1) return;
-                }
+                try {
+                    while (true) {
+                        int i = WaitHandle.WaitAny(hs);
+                        if (i == 2) return;
+                        TrayNative.PostMessageW(s_hwnd, i == 0 ? WM_OPEN_REQUEST : WM_EXIT_REQUEST, IntPtr.Zero, IntPtr.Zero);
+                        if (i == 1) return;
+                    }
+                } catch (ObjectDisposedException) { }   // shutting down
             }) { IsBackground = true, Name = "svsperf-tray-events" };
             watcher.Start();
+            try {
+                if (!o.NoBrowser) OpenUrl(s_host.Url);
 
-            if (!o.NoBrowser) OpenUrl(s_host.Url);
-
-            TrayNative.MSG msg;
-            while (TrayNative.GetMessageW(&msg, IntPtr.Zero, 0, 0) > 0) {
-                TrayNative.TranslateMessage(&msg);
-                TrayNative.DispatchMessageW(&msg);
+                TrayNative.MSG msg;
+                while (TrayNative.GetMessageW(&msg, IntPtr.Zero, 0, 0) > 0) {
+                    TrayNative.TranslateMessage(&msg);
+                    TrayNative.DispatchMessageW(&msg);
+                }
+            } finally {
+                quitWatcher.Set();
+                watcher.Join(2000);   // before its wait handles are disposed (end of this scope)
             }
-            quitWatcher.Set();
             Shutdown();
             return 0;
         } finally {

@@ -94,12 +94,20 @@ public sealed class Collector : IDisposable
 
     // the game can exit (or a run's game can be killed) between any two reads of a Process: then the Process members
     // throw InvalidOperationException ("Process has exited") or Win32Exception. That is "the game went away", not a crash.
+    // Tick and Dispose exclude each other: a tick that was slow (file I/O) when shutdown began can't restart the frame
+    // capture after Dispose has stopped it; a tick after Dispose does nothing
+    private readonly object _tickLock = new();
+    private bool _disposed;
+
     public Snapshot Tick()
     {
-        try { return TickCore(); }
-        catch (Exception e) when (e is InvalidOperationException || e is System.ComponentModel.Win32Exception) {
-            Detach();
-            return Waiting(FspStatus.Read(_o.ProfileDir), "the game exited");
+        lock (_tickLock) {
+            if (_disposed) return Waiting(new FspStatusInfo(false, "", "", "", new(), new(), null), "stopped");
+            try { return TickCore(); }
+            catch (Exception e) when (e is InvalidOperationException || e is System.ComponentModel.Win32Exception) {
+                Detach();
+                return Waiting(FspStatus.Read(_o.ProfileDir), "the game exited");
+            }
         }
     }
 
@@ -172,8 +180,12 @@ public sealed class Collector : IDisposable
 
     public void Dispose()
     {
-        Detach();
-        _frames?.Dispose();
-        _gpu.Dispose();
+        lock (_tickLock) {   // waits for a running tick (see Tick)
+            if (_disposed) return;
+            _disposed = true;
+            Detach();
+            _frames?.Dispose();
+            _gpu.Dispose();
+        }
     }
 }

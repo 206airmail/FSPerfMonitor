@@ -18,13 +18,26 @@ static const wchar_t *SkipProgramName(const wchar_t *p)
     return p;
 }
 
-// true when the argument string has no arguments, or has --tray as a whole word
+// true when there are no arguments, or one argument is exactly --tray. Arguments are split as CommandLineToArgvW does
+// for this purpose: whitespace outside quotes separates them, quote characters are dropped, so a quoted value that
+// contains " --tray " (a file path) is one argument and never matches.
 static BOOL IsTray(const wchar_t *a)
 {
+    static const wchar_t want[] = L"--tray";
+    const int wantLen = 6;
     if (!*a) return TRUE;
-    for (const wchar_t *p = a; *p; p++) {
-        if ((p == a || p[-1] == L' ' || p[-1] == L'\t') && p[0] == L'-' && p[1] == L'-' && p[2] == L't' && p[3] == L'r' &&
-            p[4] == L'a' && p[5] == L'y' && (p[6] == 0 || p[6] == L' ' || p[6] == L'\t' || p[6] == L'"')) return TRUE;
+    const wchar_t *p = a;
+    while (*p) {
+        while (*p == L' ' || *p == L'\t') p++;
+        if (!*p) break;
+        BOOL quoted = FALSE, match = TRUE;
+        int len = 0;
+        for (; *p && (quoted || (*p != L' ' && *p != L'\t')); p++) {
+            if (*p == L'"') { quoted = !quoted; continue; }
+            if (len >= wantLen || *p != want[len]) match = FALSE;
+            len++;
+        }
+        if (match && len == wantLen) return TRUE;
     }
     return FALSE;
 }

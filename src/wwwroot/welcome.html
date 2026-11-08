@@ -32,12 +32,13 @@ function frameState(state) {
     "You can also do this later in Settings.";
 }
 
+let loadFailed = false;
 fetch("/api/settings", { cache: "no-store" }).then(r => r.json()).then(v => {
   view = v;
   $("welcome-startup").checked = v.settings.startWithWindows;
   $("welcome-startup").disabled = !v.canEdit;
   frameState(v.frameTimes);
-}).catch(() => { });
+}).catch(() => { loadFailed = true; });
 
 $("welcome-setup").onclick = async () => {
   if (!view || !view.canEdit) return;
@@ -51,15 +52,19 @@ $("welcome-setup").onclick = async () => {
 };
 
 // continuing saves the choice (and that the welcome was seen), then opens the dashboard
+// (only after a successful save: the choice and "welcome seen" must not get lost; a failure says so and can be retried)
 $("continue").onclick = async e => {
-  if (!view || !view.canEdit) return;   // a phone just follows the link
+  if (loadFailed || (view && !view.canEdit)) return;   // nothing to save here (a phone): just follow the link
   e.preventDefault();
+  if (!view) { $("welcome-status").textContent = "Still loading… try again in a moment."; return; }
   const s = Object.assign({}, view.settings, { startWithWindows: $("welcome-startup").checked, welcomeShown: true });
+  $("continue").setAttribute("aria-disabled", "true");
   try {
     const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json", "X-SVS-Token": view.token }, body: JSON.stringify(s) });
-    if (!r.ok) { $("welcome-status").textContent = await r.json(); return; }
-  } catch { }
-  location.href = "/";
+    if (!r.ok) { $("welcome-status").textContent = "Your choice was not saved: " + await r.json() + " Try again."; return; }
+    location.href = "/";
+  } catch { $("welcome-status").textContent = "SVS Performance Monitor is not answering, so your choice was not saved. Try again."; }
+  finally { $("continue").removeAttribute("aria-disabled"); }
 };
 </script>
 </body></html>

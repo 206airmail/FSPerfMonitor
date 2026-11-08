@@ -13,6 +13,7 @@ public sealed class AppSettings
     public int Port { get; set; } = 8765;
     public bool StartWithWindows { get; set; }              // #7: Run entry, or the task's logon trigger with full permissions
     public bool RunWithFullPermissions { get; set; }        // #7: the scheduled task (highest privileges)
+    public string UserCopy { get; set; } = "";              // the user's own starter (not the protected copy): the Run entry's target
 
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 
@@ -20,6 +21,7 @@ public sealed class AppSettings
     public AppSettings Normalized()
     {
         ProfileFolder ??= "";
+        UserCopy ??= "";
         return this;
     }
 }

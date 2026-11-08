@@ -30,7 +30,8 @@ public static unsafe class TrayApp
 
     private static string[] s_args = [];
     private static AppSettings s_settings = new();
-    private static readonly object s_settingsLock = new();   // saves come from HTTP worker threads, the fallback from the UI
+    private static readonly object s_settingsLock = new();   // s_settings: short holds only (HTTP workers, the UI thread)
+    private static readonly object s_saveLock = new();       // one save at a time, incl. its Windows permission prompt
     private static readonly SettingsBackend s_backend = new();
 
     // the Settings page's side in the tray app: save to the file, then restart the monitor with them (on the window's thread)
@@ -42,11 +43,18 @@ public static unsafe class TrayApp
             s = s.Clone().Normalized();
             string? problem = SettingsStore.Validate(s);
             if (problem != null) return problem;
-            lock (s_settingsLock) {   // file, Windows' start-up and memory change together, one save at a time
-                problem = ApplyStartup(s_settings, s);   // may show a Windows permission prompt and wait for it
+            // one save at a time (s_saveLock, held across a Windows permission prompt); the settings themselves are locked
+            // only briefly, so the page, the tray and a restart never wait for someone to answer a prompt
+            lock (s_saveLock) {
+                AppSettings was;
+                lock (s_settingsLock) was = s_settings.Clone();
+                s.UserCopy = was.UserCopy;   // never from the page: it decides what Windows starts
+                problem = ApplyStartup(was, s);   // may show a Windows permission prompt and wait for it
                 if (problem != null) return problem;
-                try { SettingsStore.Save(s); } catch (Exception e) { return "Could not save the settings: " + e.Message; }
-                s_settings = s;
+                lock (s_settingsLock) {
+                    try { SettingsStore.Save(s); } catch (Exception e) { return "Could not save the settings: " + e.Message; }
+                    s_settings = s;
+                }
             }
             return null;
         }
@@ -69,19 +77,26 @@ public static unsafe class TrayApp
     private static string? ApplyStartup(AppSettings was, AppSettings now)
     {
         if (was.StartWithWindows == now.StartWithWindows && was.RunWithFullPermissions == now.RunWithFullPermissions) return null;
-        const string refused = "Windows' permission was not given, so nothing was changed.";
-        const string failed = "Windows could not change how SVS Performance Monitor starts. Nothing was changed.";
+        static string Why(int r) => r switch {
+            AutoStart.ExitCancelled => "Windows' permission was not given, so nothing was changed.",
+            AutoStart.ExitNotPublished => "Full permissions work only with the downloaded SVS Performance Monitor (SVSPerfMonitor.exe and .com together), not a development build.",
+            AutoStart.ExitFilesInUse => "SVS Performance Monitor's protected copy is in use. Exit SVS Performance Monitor, start it again and save once more.",
+            _ => "Windows could not change how SVS Performance Monitor starts. Nothing was changed.",
+        };
+        // the Run entry always starts the user's own copy (the protected one goes when full permissions go)
+        string userCopy = AutoStart.RunsFromProtectedDir() && now.UserCopy.Length > 0 ? now.UserCopy : AutoStart.StarterPath();
         try {
             if (now.RunWithFullPermissions) {
+                // the task runs a protected copy in Program Files, made by the helper (see AutoStart: no UAC bypass)
                 int r = AutoStart.RunElevated($"--admin task-set {AutoStart.CurrentUserSid()} {(now.StartWithWindows ? 1 : 0)} {s_instance}");
-                if (r != AutoStart.ExitOk) return r == AutoStart.ExitCancelled ? refused : failed;
+                if (r != AutoStart.ExitOk) return Why(r);
                 AutoStart.SetRunEntry(s_instance, false);   // the task's logon trigger starts it now
             } else {
                 if (was.RunWithFullPermissions) {
-                    int r = AutoStart.RunElevated($"--admin task-delete {s_instance}");
-                    if (r != AutoStart.ExitOk) return r == AutoStart.ExitCancelled ? refused : failed;
+                    int r = AutoStart.RunElevated($"--admin task-delete {AutoStart.CurrentUserSid()} {s_instance}");
+                    if (r != AutoStart.ExitOk) return Why(r);
                 }
-                AutoStart.SetRunEntry(s_instance, now.StartWithWindows);
+                AutoStart.SetRunEntry(s_instance, now.StartWithWindows, userCopy);
             }
         } catch (Exception e) { return "Could not change how SVS Performance Monitor starts: " + e.Message; }
         return null;
@@ -111,6 +126,20 @@ public static unsafe class TrayApp
             return 2;
         }
         s_instance = o.Instance;
+        // started by the full-permissions task: only from the protected copy in Program Files (the task never points
+        // anywhere else; if something did, refuse to run elevated from a folder the user can write)
+        if (AutoStart.IsElevated() && args.Contains("--handover") && !AutoStart.RunsFromProtectedDir()) {
+            TrayNative.MessageBoxW(IntPtr.Zero, "SVS Performance Monitor was started with full permissions from an unprotected folder and stopped. " +
+                "Turn \"Run with full permissions\" off and on again in Settings.", Title, TrayNative.MB_ICONWARNING);
+            return 5;
+        }
+        // remember the user's own copy (the Run entry's target when the protected copy runs)
+        if (!AutoStart.RunsFromProtectedDir() && s_settings.UserCopy != AutoStart.StarterPath()) {
+            lock (s_settingsLock) {
+                s_settings.UserCopy = AutoStart.StarterPath();
+                try { SettingsStore.Save(s_settings); } catch { }
+            }
+        }
         // a second start opens the dashboard (only an explicit --no-browser / --autostart just makes sure it runs: the
         // "open on start" setting is about starting, not about a second double-click)
         bool openOnSecondStart = !args.Contains("--no-browser") && !args.Contains("--autostart");
@@ -135,14 +164,19 @@ public static unsafe class TrayApp
             return 0;
         }
         // full permissions: the scheduled task starts the elevated copy (no prompt); this one only opens the browser
-        if (s_settings.RunWithFullPermissions && !AutoStart.IsElevated() && !args.Contains("--handover")) {
-            if (AutoStart.RunTask(o.Instance)) {
-                mutex.ReleaseMutex();   // the elevated copy (--handover) waits for it
-                if (!o.NoBrowser && WaitForPort(o.Port, 15000)) OpenUrl(settingsUrl);
+        if (s_settings.RunWithFullPermissions && !AutoStart.IsElevated() && !args.Contains("--handover")
+            && AutoStart.ProtectedCopyReady(o.Instance) && AutoStart.RunTask(o.Instance)) {
+            mutex.ReleaseMutex();   // the elevated copy (--handover) waits for it
+            if (WaitForPort(o.Port, 20000)) {
+                if (!o.NoBrowser) OpenUrl(settingsUrl);
                 return 0;
             }
-            // no task (removed by hand?): run normally, without full permissions
+            // the elevated copy didn't come up: run here after all (unless it took over meanwhile)
+            bool again;
+            try { again = mutex.WaitOne(0); } catch (AbandonedMutexException) { again = true; }
+            if (!again) return 0;
         }
+        // (no task or protected copy: run normally, without full permissions)
         try {
             try { s_host = new MonitorHost(o, s_backend); }
             catch (System.Net.Sockets.SocketException) {
@@ -300,9 +334,14 @@ public static unsafe class TrayApp
         // full permissions just turned on: hand over to the elevated copy the task starts (it waits for our exit)
         bool full; lock (s_settingsLock) full = s_settings.RunWithFullPermissions;
         if (full && !AutoStart.IsElevated()) {
-            if (AutoStart.RunTask(s_instance)) { TrayNative.DestroyWindow(s_hwnd); return; }
+            // only when the task can start its protected copy: else this copy would quit and nothing would run
+            if (AutoStart.ProtectedCopyReady(s_instance) && AutoStart.RunTask(s_instance)) { TrayNative.DestroyWindow(s_hwnd); return; }
             TrayNative.MessageBoxW(IntPtr.Zero, "SVS Performance Monitor could not restart with full permissions. It keeps running without them.",
                 Title, TrayNative.MB_ICONWARNING);
+        } else if (!full && AutoStart.IsElevated() && AutoStart.RunsFromProtectedDir()) {
+            // Windows can't take full permissions away from a running program: say so rather than look as if it had
+            TrayNative.MessageBoxW(IntPtr.Zero, "Full permissions are off. SVS Performance Monitor keeps them until you exit it " +
+                "(right-click its icon, Exit) and start it again.", Title, 0x40 /* MB_ICONINFORMATION */);
         }
         var old = s_host;
         int oldPort = old != null ? new Uri(old.Url).Port : s_settings.Port;
@@ -454,7 +493,9 @@ public static unsafe class TrayApp
     public static void OpenUrl(string url)
     {
         try {
-            if (FrameMonitor.IsElevated()) Process.Start(new ProcessStartInfo("explorer.exe", "\"" + url + "\"") { UseShellExecute = false });
+            if (FrameMonitor.IsElevated())   // (by full path: never a same-named file next to an elevated program)
+                Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"),
+                    "\"" + url + "\"") { UseShellExecute = false });
             else Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         } catch { }
     }

@@ -19,15 +19,47 @@ public static unsafe class AutoStart
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     public const string PerfLogUsersSid = "S-1-5-32-559";
 
-    public static string TaskName(string instance) => instance == "SVSPerfMonitor" ? "SVS Performance Monitor" : instance;
+    // per Windows user (the task's principal and its protected copy belong to one account; another user's must never be
+    // overwritten or removed): the name carries the user's SID
+    public static string TaskName(string instance, string userSid) =>
+        (instance == "SVSPerfMonitor" ? "SVS Performance Monitor" : instance) + " - " + userSid;
 
     // what players start: the starter next to the program (published), or the program itself (a development build)
     public static string StarterPath()
     {
         string self = Environment.ProcessPath!;
         string starter = Path.ChangeExtension(self, ".exe");
-        return self.EndsWith(".com", StringComparison.OrdinalIgnoreCase) && File.Exists(starter) ? starter : self;
+        return IsPublished() ? starter : self;
     }
+
+    // the published pair (SVSPerfMonitor.com + its starter .exe), not a development build (which needs its .dll next to it)
+    public static bool IsPublished()
+    {
+        string self = Environment.ProcessPath!;
+        return self.EndsWith(".com", StringComparison.OrdinalIgnoreCase) && File.Exists(Path.ChangeExtension(self, ".exe"));
+    }
+
+    // ---- the protected copy (full permissions) ----
+    // A task that runs elevated without a prompt must never run files the user (or anything running as the user) can
+    // change: that would be a way around UAC (replace the program or PresentMon, then trigger the task). So the task runs
+    // a copy in Program Files, which only administrators can write, made by the elevated helper.
+
+    public static string ProtectedDir(string instance, string userSid) => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "SimVizion Studios",
+        instance == "SVSPerfMonitor" ? "SVS Performance Monitor" : instance, userSid);
+
+    // the task can start (its protected starter is there): checked before handing over to it
+    public static bool ProtectedCopyReady(string instance) =>
+        File.Exists(Path.Combine(ProtectedDir(instance, CurrentUserSid()), "SVSPerfMonitor.exe")) && TaskExists(instance);
+
+    public static bool RunsFromProtectedDir()
+    {
+        string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles).TrimEnd('\\') + "\\";
+        return Environment.ProcessPath!.StartsWith(pf, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // system tools by full path: an elevated process must never pick up a same-named file planted next to it
+    private static string System32(string exe) => Path.Combine(Environment.SystemDirectory, exe);
 
     // ---- start with Windows (no admin) ----
 
@@ -37,10 +69,11 @@ public static unsafe class AutoStart
         return k?.GetValue(instance) is string;
     }
 
-    public static void SetRunEntry(string instance, bool on)
+    // `starter` = the user's own copy (an elevated copy runs from Program Files, which goes when full permissions go)
+    public static void SetRunEntry(string instance, bool on, string? starter = null)
     {
         using var k = Registry.CurrentUser.CreateSubKey(RunKey);
-        if (on) k.SetValue(instance, $"\"{StarterPath()}\" --tray --autostart" + (instance != "SVSPerfMonitor" ? $" --instance {instance}" : ""));
+        if (on) k.SetValue(instance, $"\"{starter ?? StarterPath()}\" --tray --autostart" + (instance != "SVSPerfMonitor" ? $" --instance {instance}" : ""));
         else if (k.GetValue(instance) != null) k.DeleteValue(instance, false);
     }
 
@@ -70,15 +103,15 @@ public static unsafe class AutoStart
             $"<Actions Context=\"Author\"><Exec><Command>{X(starter)}</Command><Arguments>{X(args)}</Arguments></Exec></Actions></Task>";
     }
 
-    public static bool TaskExists(string instance) => Schtasks($"/Query /TN \"{TaskName(instance)}\"") == 0;
+    public static bool TaskExists(string instance) => Schtasks($"/Query /TN \"{TaskName(instance, CurrentUserSid())}\"") == 0;
 
     // starts the full-permissions copy without a prompt (the task runs elevated)
-    public static bool RunTask(string instance) => Schtasks($"/Run /TN \"{TaskName(instance)}\"") == 0;
+    public static bool RunTask(string instance) => Schtasks($"/Run /TN \"{TaskName(instance, CurrentUserSid())}\"") == 0;
 
     private static int Schtasks(string args)
     {
         try {
-            var psi = new ProcessStartInfo("schtasks.exe", args) {
+            var psi = new ProcessStartInfo(System32("schtasks.exe"), args) {
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
             using var p = Process.Start(psi)!;
             p.StandardOutput.ReadToEnd(); p.StandardError.ReadToEnd();
@@ -118,7 +151,7 @@ public static unsafe class AutoStart
 
     // ---- the elevated helper ----
 
-    public const int ExitOk = 0, ExitCancelled = 1223, ExitFailed = 1;
+    public const int ExitOk = 0, ExitCancelled = 1223, ExitFailed = 1, ExitNotPublished = 2, ExitFilesInUse = 3;
 
     // runs this program elevated with `args` (a Windows prompt) and waits. ExitCancelled when the prompt was refused.
     public static int RunElevated(string args)
@@ -135,7 +168,7 @@ public static unsafe class AutoStart
         } finally { Native.CloseHandle(sei.hProcess); }
     }
 
-    // `--admin task-set <sid> <logon 0|1> <instance>` / `--admin task-delete <instance>` / `--admin perflog <sid>`
+    // `--admin task-set <sid> <logon 0|1> <instance>` / `--admin task-delete <sid> <instance>` / `--admin perflog <sid>`
     public static int AdminMain(string[] a)
     {
         try {
@@ -144,17 +177,45 @@ public static unsafe class AutoStart
                 case "task-set": {
                     string sid = ValidUserSid(a[2]);
                     string instance = ValidInstance(a[4]);
-                    string xml = TaskXml(sid, StarterPath(), a[3] == "1", instance);
-                    string tmp = Path.Combine(Path.GetTempPath(), $"svsperf_task_{Guid.NewGuid():N}.xml");
+                    if (!IsPublished()) return ExitNotPublished;
+                    // 1. the protected copy: this program, its starter and PresentMon, from the helper's own folder
+                    string dir = ProtectedDir(instance, sid);
+                    Directory.CreateDirectory(dir);   // inherits Program Files' ACL: administrators write, users read
+                    string from = Path.GetDirectoryName(Environment.ProcessPath)!;
+                    var files = new List<string> { Path.GetFileName(Environment.ProcessPath)!, Path.GetFileName(StarterPath()) };
+                    files.AddRange(Directory.GetFiles(from, "PresentMon*.exe").Select(Path.GetFileName)!);
+                    foreach (var f in files) {
+                        string src = Path.Combine(from, f), dst = Path.Combine(dir, f);
+                        if (string.Equals(Path.GetFullPath(src), Path.GetFullPath(dst), StringComparison.OrdinalIgnoreCase)) continue;
+                        if (SameFile(src, dst)) continue;
+                        try { File.Copy(src, dst, overwrite: true); } catch (IOException) { return ExitFilesInUse; }
+                    }
+                    // 2. the task, for the protected starter. Its definition goes through the protected folder too, never
+                    // through the user's %TEMP%, where it could be swapped between writing and reading.
+                    string xml = TaskXml(sid, Path.Combine(dir, Path.GetFileName(StarterPath())), a[3] == "1", instance);
+                    string xmlFile = Path.Combine(dir, $"task_{Guid.NewGuid():N}.xml");
                     try {
-                        File.WriteAllText(tmp, xml, System.Text.Encoding.Unicode);
-                        return Schtasks($"/Create /TN \"{TaskName(instance)}\" /XML \"{tmp}\" /F") == 0 ? ExitOk : ExitFailed;
-                    } finally { try { File.Delete(tmp); } catch { } }
+                        File.WriteAllText(xmlFile, xml, System.Text.Encoding.Unicode);
+                        return Schtasks($"/Create /TN \"{TaskName(instance, sid)}\" /XML \"{xmlFile}\" /F") == 0 ? ExitOk : ExitFailed;
+                    } finally { try { File.Delete(xmlFile); } catch { } }
                 }
                 case "task-delete": {
-                    string instance = ValidInstance(a[2]);
-                    int r = Schtasks($"/Delete /TN \"{TaskName(instance)}\" /F");
-                    return r == 0 || Schtasks($"/Query /TN \"{TaskName(instance)}\"") != 0 ? ExitOk : ExitFailed;
+                    string sid = ValidUserSid(a[2]);
+                    string instance = ValidInstance(a[3]);
+                    int r = Schtasks($"/Delete /TN \"{TaskName(instance, sid)}\" /F");
+                    bool gone = r == 0 || Schtasks($"/Query /TN \"{TaskName(instance, sid)}\"") != 0;
+                    // the protected copy goes too (best effort: a copy still running there keeps its files until it exits)
+                    try {
+                        string dir = ProtectedDir(instance, sid);
+                        if (Directory.Exists(dir)) {
+                            foreach (var f in Directory.GetFiles(dir)) { try { File.Delete(f); } catch { } }
+                            try { Directory.Delete(dir); } catch { }
+                            // the now-empty product and studio folders too (never another user's)
+                            for (string? p = Path.GetDirectoryName(dir); p != null && p.Contains("SimVizion Studios"); p = Path.GetDirectoryName(p))
+                                if (Directory.Exists(p) && !Directory.EnumerateFileSystemEntries(p).Any()) Directory.Delete(p); else break;
+                        }
+                    } catch { }
+                    return gone ? ExitOk : ExitFailed;
                 }
                 case "perflog": {
                     var sid = new SecurityIdentifier(ValidUserSid(a[2]));
@@ -169,6 +230,13 @@ public static unsafe class AutoStart
             }
         } catch { }
         return ExitFailed;
+    }
+
+    private static bool SameFile(string a, string b)
+    {
+        if (!File.Exists(b) || new FileInfo(a).Length != new FileInfo(b).Length) return false;
+        using var sa = File.OpenRead(a); using var sb = File.OpenRead(b);
+        return System.Security.Cryptography.SHA256.HashData(sa).AsSpan().SequenceEqual(System.Security.Cryptography.SHA256.HashData(sb));
     }
 
     // a real user account's SID (S-1-5-21-...): never a group, service or well-known SID

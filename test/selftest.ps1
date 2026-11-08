@@ -14,7 +14,10 @@ $fails = 0
 function Check([bool]$ok, [string]$what) {
     if ($ok) { Write-Host "  ok   $what" } else { Write-Host "  FAIL $what" -ForegroundColor Red; $script:fails++ }
 }
-function Snap([int]$procId) { & $exe --once --pid $procId --interval-ms 2000 --sample-hz 250 2>$null | ConvertFrom-Json }   # (stderr: start-up notices, e.g. a stale session cleaned up)
+function Snap([int]$procId) {   # stderr = start-up notices (e.g. a stale session cleaned up); PS 5.1 + 'Stop' would throw on them even with 2>$null
+    $ErrorActionPreference = 'Continue'
+    & $exe --once --pid $procId --interval-ms 2000 --sample-hz 250 2>$null | ConvertFrom-Json
+}
 
 $b = Start-Process $exe -ArgumentList '--burn', '12' -PassThru -WindowStyle Hidden
 Start-Sleep -Milliseconds 700

@@ -51,7 +51,7 @@ public static class EtwSessions
 
     private static (int Code, string Out) Logman(string args)
     {
-        var psi = new ProcessStartInfo("logman.exe", args) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        var psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "logman.exe"), args) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         using var p = Process.Start(psi)!;
         var o = p.StandardOutput.ReadToEndAsync();
         var e = p.StandardError.ReadToEndAsync();

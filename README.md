@@ -4,8 +4,9 @@ A performance monitor for Farming Simulator 25 that watches the game from outsid
 where the main thread's time goes (the game, each FSPluginHost plugin, the graphics driver, Windows), and what the
 plugins report about themselves. A dashboard opens in the browser.
 
-FSPerf is its own tool, with its own version and release cycle. It lives in the FSPluginHost repository for now and is
-built to move to its own repository unchanged. It shares no code with FSPluginHost. Its only link is reading the
+FSPerf is its own tool, with its own version and release cycle (repository: 206airmail/FSPerfMonitor; until 2026-11-08
+it lived in the FSPluginHost repository, so issue numbers in older commit messages are FSPluginHost's). It shares no
+code with FSPluginHost. Its only link is reading the
 documented runtime file `<profile>\fsp\fsp.status.xml` (FSPluginHost `docs/ABI.md`, "Runtime files"). It works
 without FSPluginHost too.
 
@@ -126,4 +127,5 @@ Don't sample during timing-sensitive A/B test runs unless both arms are sampled.
 - the monitored process exiting mid-run is no crash (0.2.1: a game that quits or is killed between two reads used to end
   FSPerf with "Process has exited"; now it goes back to "waiting for the game")
 
-MIT licence, Copyright (c) 2026 Jared Brown.
+MIT licence, Copyright (c) 2026 Jared Brown: see `LICENSE`. PresentMon (downloaded, not in this repository) is Intel's,
+under its own MIT licence.

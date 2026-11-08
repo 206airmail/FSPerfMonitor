@@ -35,5 +35,6 @@ FILES
   SVSPerfMonitor.com   the program itself (the .exe starts it; also the command line: SVSPerfMonitor --help)
   PresentMon-*.exe     Intel PresentMon, reads frame times (MIT licence, see PresentMon-LICENSE.txt)
   LICENSE.txt          this program's licence (MIT)
+  .NET-LICENSE.txt, .NET-THIRD-PARTY-NOTICES.txt   the .NET runtime built into SVSPerfMonitor.com (MIT + notices)
 
 Source and help: https://github.com/206airmail/FSPerfMonitor

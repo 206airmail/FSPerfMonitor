@@ -14,6 +14,11 @@ $pub = if ($Out) { [IO.Path]::GetFullPath((Join-Path $PSScriptRoot $Out)) } else
 $pmVersion = '2.6.0'
 $pmSha256 = 'B2A706BC6AD475749E3B7E3409263AA1E6906D45BDCF993F6DBC0F660188F1AF'
 $pmFile = Join-Path $PSScriptRoot "tools\PresentMon-$pmVersion-x64.exe"
+# the hash is checked EVERY time, not only after a download: a damaged or replaced file in tools\ never ships
+if ((Test-Path $pmFile) -and (Get-FileHash $pmFile -Algorithm SHA256).Hash -ne $pmSha256) {
+    if (-not $FetchPresentMon) { throw "$pmFile does not match PresentMon $pmVersion (SHA256): delete it, or build with -FetchPresentMon" }
+    Remove-Item $pmFile   # re-downloaded below
+}
 if ($FetchPresentMon -and -not (Test-Path $pmFile)) {
     New-Item -ItemType Directory -Force (Split-Path $pmFile) | Out-Null
     Invoke-WebRequest "https://github.com/GameTechDev/PresentMon/releases/download/v$pmVersion/PresentMon-$pmVersion-x64.exe" -OutFile $pmFile -UseBasicParsing

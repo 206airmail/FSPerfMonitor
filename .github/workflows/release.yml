@@ -2,6 +2,10 @@
 # package, and publish a GitHub Release with the zip and its SHA256. Manual runs ("Run workflow") build and upload the
 # zip as a workflow artifact only, without a release - for checking a build before tagging.
 # The full self-test (test/selftest.ps1) runs on a desktop PC before tagging: it starts tray apps and a capture session.
+#
+# Security: the build job only reads the repository; only the small publish job (tags only) may write, and it runs no
+# third-party code but download-artifact. Actions are pinned to commits. The tag reaches scripts only through an
+# environment variable (never pasted into script text) and must look exactly like v1.2.3.
 name: release
 
 on:
@@ -10,25 +14,33 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # create the release (tag runs only)
+  contents: read
 
 jobs:
   build:
     runs-on: windows-2025
+    env:
+      TAG: ${{ github.ref_name }}
+      IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73   # v6.1.0
         with:
           dotnet-version: '10.0.x'
 
-      - name: Version matches the tag
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Version (and, for a tag, that it matches)
+        id: version
         shell: pwsh
         run: |
           $v = ([xml](Get-Content src/FSPerf.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-          if ("v$v" -ne '${{ github.ref_name }}') { throw "tag ${{ github.ref_name }} but src/FSPerf.csproj says $v" }
-          "VERSION=$v" >> $env:GITHUB_ENV
+          if ($env:IS_TAG -eq 'true') {
+            if ($env:TAG -notmatch '^v\d+\.\d+\.\d+$') { throw 'a release tag must look like v1.2.3' }
+            if ($env:TAG -ne "v$v") { throw ('tag {0} but src/FSPerf.csproj says {1}' -f $env:TAG, $v) }
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
 
       - name: Build (native program, starter, PresentMon pinned by hash)
         shell: powershell   # Windows PowerShell 5.1, as on players' and developers' PCs
@@ -52,29 +64,43 @@ jobs:
         shell: powershell
         run: ./tools/package.ps1
 
-      - name: Upload the zip (every run)
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
         with:
           name: SVSPerfMonitor
           path: |
             dist/*.zip
             dist/*.sha256
+          if-no-files-found: error
 
-      - name: Publish the release (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # the release; nothing else in this job
+    env:
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.build.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333   # v8.0.2
+        with:
+          name: SVSPerfMonitor
+          path: dist
+
+      - name: Publish the release
+        shell: bash
         run: |
-          $zip = "dist/SVSPerfMonitor-$env:VERSION.zip"
-          $sha = (Get-Content "$zip.sha256").Split(' ')[0]
-          $notes = @"
-          **SVS Performance Monitor $env:VERSION** - shows what limits Farming Simulator 25 on your PC.
-
-          **Download:** SVSPerfMonitor-$env:VERSION.zip below. Unzip it anywhere, keep the files together, double-click **SVSPerfMonitor.exe**. README.txt in the zip explains the rest.
-
-          The program is not signed yet: if Windows says "Windows protected your PC", click *More info*, then *Run anyway*.
-
-          SHA256 of the zip: ``$sha``
-          "@
-          gh release create '${{ github.ref_name }}' $zip "$zip.sha256" --title "SVS Performance Monitor $env:VERSION" --notes $notes
+          set -euo pipefail
+          zip="dist/SVSPerfMonitor-${VERSION}.zip"
+          sha="$(cut -d' ' -f1 "${zip}.sha256")"
+          notes="$(printf '%s\n' \
+            "**SVS Performance Monitor ${VERSION}** - shows what limits Farming Simulator 25 on your PC." \
+            "" \
+            "**Download:** SVSPerfMonitor-${VERSION}.zip below. Unzip it anywhere, keep the files together, double-click **SVSPerfMonitor.exe**. README.txt in the zip explains the rest." \
+            "" \
+            "The program is not signed yet: if Windows says \"Windows protected your PC\", click *More info*, then *Run anyway*." \
+            "" \
+            "SHA256 of the zip: \`${sha}\`")"
+          gh release create "${TAG}" "${zip}" "${zip}.sha256" --title "SVS Performance Monitor ${VERSION}" --notes "${notes}"

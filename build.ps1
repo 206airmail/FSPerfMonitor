@@ -1,5 +1,5 @@
-# build.ps1 - build FSPerf (needs the .NET 8 SDK). -Publish also writes a self-contained single fsperf.exe to publish\
-# (no .NET install needed on the target machine).
+# build.ps1 - build FSPerf (needs the .NET 8 SDK). -Publish also writes ONE native fsperf.exe to publish\ (NativeAOT, ~8 MB,
+# no .NET install needed on the target machine; needs the Visual Studio C++ build tools for the native link).
 #   -FetchPresentMon  downloads Intel's PresentMon console (MIT, signed by Intel) to tools\ for full mode; pinned + hash-checked
 param([switch]$Publish, [switch]$FetchPresentMon)
 $ErrorActionPreference = 'Stop'
@@ -16,7 +16,10 @@ if ($FetchPresentMon -and -not (Test-Path $pmFile)) {
 dotnet build $src -c Release -nologo -v q
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if ($Publish) {
-    dotnet publish $src -c Release -nologo -v q --self-contained true -p:PublishSingleFile=true -o (Join-Path $PSScriptRoot 'publish')
+    # the native linker step locates the C++ tools with vswhere, which the VS installer doesn't put on PATH
+    $vsInstaller = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
+    if (Test-Path $vsInstaller) { $env:PATH = "$vsInstaller;$env:PATH" }
+    dotnet publish $src -c Release -nologo -v q -o (Join-Path $PSScriptRoot 'publish')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     if (Test-Path $pmFile) { Copy-Item $pmFile (Join-Path $PSScriptRoot 'publish') }  # full mode finds it next to fsperf.exe
 }

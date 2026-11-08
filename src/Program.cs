@@ -55,8 +55,6 @@ public sealed class Options
 public static class Program
 {
     public const string Version = "0.3.0";
-    public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, NumberHandling =
-        System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
 
     public static int Main(string[] args)
     {
@@ -83,7 +81,7 @@ public static class Program
         if (o.Once) {
             col.Tick();
             Thread.Sleep(o.IntervalMs);
-            Console.WriteLine(JsonSerializer.Serialize(col.Tick(), Json));
+            Console.WriteLine(JsonSerializer.Serialize(col.Tick(), FsperfJson.Default.Snapshot));
             return 0;
         }
         using var rec = o.Record != null ? new CsvRecorder(o.Record) : null;
@@ -116,7 +114,7 @@ public static class Program
         while (!stop.Wait(o.IntervalMs) && DateTime.UtcNow < until) {
             try {
                 var s = col.Tick();
-                web.Publish(JsonSerializer.Serialize(s, Json));
+                web.Publish(JsonSerializer.Serialize(s, FsperfJson.Default.Snapshot));
                 rec?.Write(s);
                 lastError = "";
             } catch (Exception e) {   // one bad sample never ends the monitor (the game comes and goes all day)

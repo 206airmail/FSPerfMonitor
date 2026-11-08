@@ -255,13 +255,12 @@ public sealed class WebServer : IDisposable
           .Append(reset ? "true" : "false").Append(",\"gap\":").Append(gap ? "true" : "false").Append(",\"lines\":[");
         for (int i = 0; i < lines.Count; i++) {
             if (i > 0) sb.Append(',');
-            sb.Append('[').Append(lines[i].Seq).Append(',').Append(System.Text.Json.JsonSerializer.Serialize(lines[i].Text, LogJson))
+            sb.Append('[').Append(lines[i].Seq).Append(',').Append(System.Text.Json.JsonSerializer.Serialize(lines[i].Text, FsperfJson.LogText))
               .Append(lines[i].Marker ? ",1]" : ",0]");
         }
         return sb.Append("]}\n\n").ToString();
     }
 
-    private static readonly System.Text.Json.JsonSerializerOptions LogJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     // both run under tail.Gate on the tailer's thread: they only queue, never touch a socket
     private void OnLogAppended(IReadOnlyList<LogLine> lines)

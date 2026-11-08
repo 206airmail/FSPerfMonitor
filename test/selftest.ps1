@@ -2,10 +2,11 @@
 #   1. a spinning .NET main thread (fsperf --burn): ~100% main-thread busy, CPU-bound verdict, samples at the asked rate
 #   2. a native busy main thread (certutil hashing a sparse 2 GB file): attributed to its real module (bcryptprimitives)
 #   3. the verdict rules (Collector.Judge) through --once on an idle process
-# Exit 0 = all passed. Build first (build.ps1).
+# Exit 0 = all passed. Build first (build.ps1). -Exe tests another build (e.g. the native publish\fsperf.exe).
+param([string]$Exe)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
-$exe = Join-Path $root 'src\bin\Release\net8.0-windows\win-x64\fsperf.exe'
+$exe = if ($Exe) { (Resolve-Path $Exe).Path } else { Join-Path $root 'src\bin\Release\net8.0-windows\win-x64\fsperf.exe' }
 if (-not (Test-Path $exe)) { Write-Host "build first: $exe missing"; exit 2 }
 $fails = 0
 function Check([bool]$ok, [string]$what) {

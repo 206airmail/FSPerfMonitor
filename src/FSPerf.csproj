@@ -12,6 +12,7 @@
     <Version>0.3.1</Version>
     <Product>FSPerf</Product>
     <Copyright>Copyright (c) 2026 Jared Brown. MIT licence.</Copyright>
+    <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>

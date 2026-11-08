@@ -154,12 +154,19 @@ public static unsafe class AutoStart
     public const int ExitOk = 0, ExitCancelled = 1223, ExitFailed = 1, ExitNotPublished = 2, ExitFilesInUse = 3;
 
     // runs this program elevated with `args` (a Windows prompt) and waits. ExitCancelled when the prompt was refused.
-    // `starter`: which copy's helper to run (default: this one). The full-permissions copy passes the user's own copy, so
-    // the helper never runs from inside the protected folder it may have to remove.
-    public static int RunElevated(string args, string? starter = null)
+    // An admin step: an elevated copy (the protected one) does it in-process - it must never start another program, since
+    // that would get no prompt and nothing outside Program Files may run elevated. A normal copy starts its own helper
+    // with a Windows permission prompt (the user sees and approves exactly this program).
+    public static int Admin(string args)
+    {
+        if (IsElevated()) return AdminMain(["--admin", .. args.Split(' ', StringSplitOptions.RemoveEmptyEntries)]);
+        return RunElevated("--admin " + args);
+    }
+
+    private static int RunElevated(string args)
     {
         var sei = new SHELLEXECUTEINFOW { cbSize = (uint)sizeof(SHELLEXECUTEINFOW), fMask = 0x40 /* SEE_MASK_NOCLOSEPROCESS */, nShow = 0 };
-        string file = starter ?? StarterPath();   // published: the GUI starter, so no console window flashes (Windows 10 too)
+        string file = StarterPath();   // this copy's own starter: no console window flashes (Windows 10 too)
         fixed (char* verb = "runas") fixed (char* f = file) fixed (char* a = args) {
             sei.lpVerb = verb; sei.lpFile = f; sei.lpParameters = a;
             if (!ShellExecuteExW(&sei)) return Marshal.GetLastWin32Error() == 1223 ? ExitCancelled : ExitFailed;

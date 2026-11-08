@@ -62,7 +62,7 @@ public static unsafe class TrayApp
         public string SetupFrameTimes()
         {
             if (AutoStart.FrameTimesAccess() == "ready") return "ready";
-            int r = AutoStart.RunElevated($"--admin perflog {AutoStart.CurrentUserSid()}");
+            int r = AutoStart.Admin($"perflog {AutoStart.CurrentUserSid()}");
             return r == AutoStart.ExitOk ? AutoStart.FrameTimesAccess() : r == AutoStart.ExitCancelled ? "cancelled" : "failure";
         }
         public void Saved() => TrayNative.PostMessageW(s_hwnd, WM_SETTINGS_SAVED, IntPtr.Zero, IntPtr.Zero);
@@ -83,18 +83,18 @@ public static unsafe class TrayApp
             AutoStart.ExitFilesInUse => "SVS Performance Monitor's protected copy is in use. Exit SVS Performance Monitor, start it again and save once more.",
             _ => "Windows could not change how SVS Performance Monitor starts. Nothing was changed.",
         };
-        // the Run entry always starts the user's own copy (the protected one goes when full permissions go), and the admin
-        // helper runs from it too: never from inside the protected folder it updates or removes
+        // the Run entry always starts the user's own copy (the protected one goes when full permissions go). It runs at
+        // normal level at logon, so a path from the settings file is fine here - it is NEVER run elevated (AutoStart.Admin).
         string userCopy = AutoStart.RunsFromProtectedDir() && now.UserCopy.Length > 0 && File.Exists(now.UserCopy) ? now.UserCopy : AutoStart.StarterPath();
         try {
             if (now.RunWithFullPermissions) {
                 // the task runs a protected copy in Program Files, made by the helper (see AutoStart: no UAC bypass)
-                int r = AutoStart.RunElevated($"--admin task-set {AutoStart.CurrentUserSid()} {(now.StartWithWindows ? 1 : 0)} {s_instance}", userCopy);
+                int r = AutoStart.Admin($"task-set {AutoStart.CurrentUserSid()} {(now.StartWithWindows ? 1 : 0)} {s_instance}");
                 if (r != AutoStart.ExitOk) return Why(r);
                 AutoStart.SetRunEntry(s_instance, false);   // the task's logon trigger starts it now
             } else {
                 if (was.RunWithFullPermissions) {
-                    int r = AutoStart.RunElevated($"--admin task-delete {AutoStart.CurrentUserSid()} {s_instance}", userCopy);
+                    int r = AutoStart.Admin($"task-delete {AutoStart.CurrentUserSid()} {s_instance}");
                     if (r != AutoStart.ExitOk) return Why(r);
                 }
                 AutoStart.SetRunEntry(s_instance, now.StartWithWindows, userCopy);

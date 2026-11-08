@@ -14,12 +14,17 @@ function Check([bool]$ok, [string]$what) {
 }
 function Snap([int]$procId) { & $exe --once --pid $procId --interval-ms 2000 --sample-hz 250 | ConvertFrom-Json }
 
-$b = Start-Process $exe -ArgumentList '--burn', '8' -PassThru -WindowStyle Hidden
+$b = Start-Process $exe -ArgumentList '--burn', '12' -PassThru -WindowStyle Hidden
 Start-Sleep -Milliseconds 700
 $j = Snap $b.Id
 Check ($j.attached -and $j.mainThreadBusyPct -ge 85) "busy .NET main thread seen busy ($([math]::Round($j.mainThreadBusyPct))%)"
 Check ($j.verdict.label -eq 'CPU-bound') "verdict CPU-bound ($($j.verdict.reason))"
-Check ($j.mainThreadSamples -ge 300) "sampler rate: $($j.mainThreadSamples) samples in 2 s at 250 Hz"
+Check ($j.mainThreadSamples -ge 300 -and $j.sampleHz -eq 250) "sampler rate: $($j.mainThreadSamples) samples in 2 s at 250 Hz (opt-in)"
+# the main-thread breakdown is opt-in (#2): by default and with --sample-hz 0 the game's thread is never suspended
+foreach ($a in @(@(), @('--sample-hz', '0'))) {
+    $j0 = & $exe --once --pid $b.Id --interval-ms 1000 --no-frames @a | ConvertFrom-Json
+    Check ($j0.attached -and $j0.sampleHz -eq 0 -and $j0.mainThreadSamples -eq 0 -and @($j0.mainThreadModules).Count -eq 0 -and -not $j0.note -and $j0.mainThreadBusyPct -ge 85) "breakdown off $(if ($a) { 'with --sample-hz 0' } else { 'by default' }): 0 samples, no note, CPU busy still measured"
+}
 $b.WaitForExit()
 
 $big = Join-Path $env:TEMP 'fsperf_selftest_sparse.bin'

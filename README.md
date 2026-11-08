@@ -85,7 +85,7 @@ stopped; `--stop_existing_session` cleans up after a crash.
 | GPU 3D % | Windows' "GPU Engine" counters for the game's process: its busiest 3D engine (Task Manager's "3D") |
 | VRAM | "GPU Process Memory" dedicated usage of the game's process |
 | Game CPU, RAM | process CPU time over all logical cores, working set, private bytes |
-| Main thread: where the time goes | the main thread is suspended for microseconds about 250 times a second, its instruction pointer read and the address attributed to the module it falls in: the game exe, each `x64\fs25plugins\<Name>\` plugin, FSPluginHost (`fsp.dll`) and its loader, graphics (driver, D3D12, DXGI), Windows, runtimes |
+| Main thread: where the time goes (**off by default**, `--sample-hz 250` turns it on) | the main thread is suspended for microseconds `--sample-hz` times a second, its instruction pointer read and the address attributed to the module it falls in: the game exe, each `x64\fs25plugins\<Name>\` plugin, FSPluginHost (`fsp.dll`) and its loader, graphics (driver, D3D12, DXGI), Windows, runtimes |
 | Busiest threads | the same CPU-time measure per game thread |
 | Plugins | `fsp.status.xml`: host version, each plugin's state and the counters it publishes as status fields |
 
@@ -104,8 +104,10 @@ waits.
   leaf-only measure; inclusive time needs stack walks, which come later.
 - Lua mods all run inside the game's script engine, so they show as the game.
 
-**Sampling cost:** each sample pauses the game's main thread for a few microseconds; at 250 Hz that's well under 0.5%.
-Don't sample during timing-sensitive A/B test runs unless both arms are sampled.
+**Sampling cost (why it is off by default, 0.4):** each sample pauses the game's main thread. Measured 2026-11-08 on a
+single-threaded CPU-bound job (certutil hashing 2 GB, 5 runs each): about 2-6% slower at 250 Hz and 8-10% at 1000 Hz
+(noisy; the earlier "well under 0.5%" estimate was wrong). `--sample-hz 0` (the default) never opens or suspends the
+thread. Don't sample during timing-sensitive A/B test runs unless both arms are sampled.
 
 ## Planned
 

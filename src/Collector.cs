@@ -13,7 +13,7 @@ public sealed record Snapshot(
     DateTime Time, string Mode, bool Attached, int Pid, string Process, double ProcessCpuPct, int Cores, double MainThreadBusyPct,
     List<ThreadLoad> TopThreads, double Gpu3DPct, double GpuDedicatedMb, double WorkingSetMb, double PrivateMb,
     List<MainThreadSampler.Share> MainThreadModules, long MainThreadSamples, FspStatusInfo Fsp, Verdict Verdict, string Note,
-    FrameStats? Frames, bool Elevated);
+    FrameStats? Frames, bool Elevated, int SampleHz);
 
 public sealed class Collector : IDisposable
 {
@@ -90,7 +90,7 @@ public sealed class Collector : IDisposable
 
     private Snapshot Waiting(FspStatusInfo fsp, string why) =>
         new Snapshot(DateTime.Now, "basic", false, 0, "", 0, Environment.ProcessorCount, 0, new(), double.NaN, double.NaN, 0, 0,
-            new(), 0, fsp, new Verdict("waiting", why), "", null, _elevated);
+            new(), 0, fsp, new Verdict("waiting", why), "", null, _elevated, _sampler.Hz);
 
     // the game can exit (or a run's game can be killed) between any two reads of a Process: then the Process members
     // throw InvalidOperationException ("Process has exited") or Win32Exception. That is "the game went away", not a crash.
@@ -149,9 +149,9 @@ public sealed class Collector : IDisposable
         var frames = _frames?.TakeWindow(wall);
         bool full = frames != null && frames.State == "running" && frames.Frames > 0;
         var verdict = (full ? FrameMonitor.Judge(frames!) : null) ?? Judge(mainBusy, gpu3d);
-        string note = _sampler.Running ? "" : "main-thread sampler not running (thread access denied?)";
+        string note = _sampler.Hz == 0 || _sampler.Running ? "" : "main-thread sampler not running (thread access denied?)";
         return new Snapshot(DateTime.Now, full ? "full" : "basic", true, p.Id, p.ProcessName, procPct, Environment.ProcessorCount, mainBusy, top, gpu3d,
-            vram, ws, priv, shares, samples, fsp, verdict, note, frames, _elevated);
+            vram, ws, priv, shares, samples, fsp, verdict, note, frames, _elevated, _sampler.Hz);
     }
 
     // basic mode (no frame events): the main thread's busy share against the GPU's 3D load.

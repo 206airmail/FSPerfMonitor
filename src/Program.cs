@@ -1,6 +1,6 @@
 // Program.cs - FSPerf: a performance monitor for Farming Simulator 25, from outside the game. Copyright (c) 2026 Jared Brown.
 // MIT licence. See ..\README.md.
-//   fsperf [--port 8765] [--interval-ms 1000] [--sample-hz 250] [--record <file.csv>] [--pid <n>] [--profile <dir>]
+//   fsperf [--port 8765] [--interval-ms 1000] [--sample-hz 0|250] [--record <file.csv>] [--pid <n>] [--profile <dir>]
 //          [--once] [--no-browser] [--presentmon <exe>] [--no-frames] [--lan]
 //   --lan: the dashboard is also reachable from other computers (http://<this PC's IP>:<port>/); needs an inbound firewall
 //          rule for the port (printed when missing). The page is read-only.
@@ -16,7 +16,7 @@ public sealed class Options
 {
     public int Port = 8765;
     public int IntervalMs = 1000;
-    public int SampleHz = 250;
+    public int SampleHz;        // main-thread breakdown: 0 = off (default: it pauses the game's main thread), e.g. 250
     public string? Record;
     public int Pid;
     public string ProfileDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "My Games", "FarmingSimulator2025");

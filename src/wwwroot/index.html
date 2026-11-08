@@ -195,7 +195,7 @@ function renderFrames(s) {
 
 function render(s) {
   if (!s || s.time === undefined) return;
-  $("status").textContent = s.attached ? `attached to ${s.process} (pid ${s.pid}), ${s.mainThreadSamples} samples this tick` : "waiting for the game";
+  $("status").textContent = s.attached ? `attached to ${s.process} (pid ${s.pid}), ${s.sampleHz ? s.mainThreadSamples + " samples this tick" : "main-thread breakdown off"}` : "waiting for the game";
   const v = $("verdict");
   v.textContent = s.verdict.label;
   v.style.background = css(verdictColor[s.verdict.label] || "--idle");
@@ -216,7 +216,7 @@ function render(s) {
   renderFrames(s);
   $("mods").innerHTML = (s.mainThreadModules || []).slice(0, 14).map(m =>
     `<tr class="${esc(m.kind)}"><td>${esc(m.name)}</td><td class="kind">${esc(m.kind)}</td><td><div class="bar" style="width:${Math.max(0.5, m.percent)}%"></div></td><td class="num">${fmt(m.percent, 1)}%</td></tr>`).join("")
-    || `<tr><td colspan="4" class="kind">no samples</td></tr>`;
+    || `<tr><td colspan="4" class="kind">${s.sampleHz === 0 ? "off: it briefly pauses the game hundreds of times a second. Start FSPerf with --sample-hz 250 to see it." : "no samples"}</td></tr>`;
   $("threads").innerHTML = (s.topThreads || []).map(t =>
     `<tr><td>${t.main ? "<b>main</b> " : ""}${t.tid}</td><td><div class="bar" style="width:${Math.max(0.5, t.busyPct)}%"></div></td><td class="num">${fmt(t.busyPct)}%</td></tr>`).join("");
   const f = s.fsp;

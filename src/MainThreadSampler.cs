@@ -22,12 +22,13 @@ public sealed unsafe class MainThreadSampler : IDisposable
     public MainThreadSampler(ModuleMap modules, int hz)
     {
         _modules = modules;
-        Hz = Math.Clamp(hz, 10, 2000);
+        Hz = hz <= 0 ? 0 : Math.Clamp(hz, 10, 2000);   // 0 = off: the game's thread is never opened or suspended
     }
 
     public bool Start(uint threadId)
     {
         Stop();
+        if (Hz == 0) return false;
         var h = Native.OpenThread(Native.THREAD_SUSPEND_RESUME | Native.THREAD_GET_CONTEXT | Native.THREAD_QUERY_LIMITED_INFORMATION,
             false, threadId);
         if (h == IntPtr.Zero) return false;

@@ -5,11 +5,11 @@ ROOT = Path(__file__).parent
 PRODUCT = 'SVS Performance Monitor'  # Rename here and in app.js PRODUCT, then regenerate.
 
 def shell(page, title, body, preview='', cls=''):
-    nav = ''.join(f'<a href="{p}.html"'+(' aria-current="page"' if p == page else '')+f'>{label}</a>' for p,label in [('dashboard','Dashboard'),('settings','Settings'),('log','Game log')])
+    nav = ''.join(f'<a href="{p}.html"'+(' aria-current="page"' if p == page else '')+f'>{label}</a>' for p,label in [('dashboard','Dashboard'),('log','Game log'),('settings','Settings')])
     markup = f'''<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark light"><title>{PRODUCT} · {title}</title><link rel="icon" href="icons/app.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css"><script defer src="fixtures.js"></script><script defer src="app.js"></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark light"><title>{PRODUCT} · {title}</title><link rel="icon" href="brand/logo-64.png" type="image/png"><link rel="stylesheet" href="styles.css"><script defer src="fixtures.js"></script><script defer src="app.js"></script></head>
 <body class="{cls}" data-page="{page}"><a class="skip" href="#main">Skip to content</a>
-<header class="masthead"><div class="wrap header-inner"><a class="identity" href="dashboard.html"><img src="icons/app.svg" alt="" width="40" height="40"><div><div class="product">{PRODUCT}</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation">{nav}</nav></div></header>
+<header class="masthead"><div class="wrap header-inner"><a class="identity" href="dashboard.html"><img src="brand/logo-64.png" alt="" width="40" height="40"><div><div class="product">{PRODUCT}</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation">{nav}</nav></div></header>
 <main id="main" class="wrap {('form-page' if page=='settings' else 'welcome' if page=='welcome' else '')}">{body}</main>
 {'' if page=='log' else '<footer class="wrap footer"><span>SimVizion Studios · '+PRODUCT+'</span><span>Watches the game from outside. Nothing is added to the game.</span></footer>'}
 <aside class="preview" aria-label="Design preview controls"><div class="wrap row"><span class="caption">Design preview · sample data</span>{preview}<label for="theme">Appearance</label><select id="theme"><option value="system">Use device setting</option><option value="dark">Dark</option><option value="light">Light (proposed)</option></select><a href="tray.html">Tray preview</a><a href="welcome.html">Welcome preview</a></div></aside>

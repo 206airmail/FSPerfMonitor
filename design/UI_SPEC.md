@@ -332,7 +332,7 @@ Observed strings include source-data examples so reviewers can audit every state
 | dashboard, dashboard · Advanced | Capture: starting · Starting capture. Standard Windows permissions. |
 | dashboard, dashboard · Advanced | captures=0 |
 | dashboard, dashboard · Advanced | capturesMax=1024 |
-| dashboard | Check that FSPerf is running on your PC and that your home network is connected. |
+| dashboard | Check that SVS Performance Monitor is running on your PC and that your home network is connected. |
 | dashboard, dashboard · Advanced | Committed private bytes |
 | dashboard, dashboard · Advanced | Composed: Flip / DXGI |
 | dashboard | Connection lost |
@@ -367,9 +367,8 @@ Observed strings include source-data examples so reviewers can audit every state
 | dashboard, dashboard · Advanced | Frames this interval |
 | dashboard, dashboard · Advanced | FS25_3dTerrain |
 | dashboard, dashboard · Advanced | fsp.dll |
-| dashboard, log, settings, tray, welcome | FSPerf |
 | dashboard, dashboard · Advanced | FSPluginHost plugins |
-| dashboard, dashboard · Advanced | FSPluginHost was not found. FSPerf works without it. |
+| dashboard, dashboard · Advanced | FSPluginHost was not found. SVS Performance Monitor works without it. |
 | dashboard, dashboard · Advanced | FSPMesh |
 | dashboard | Full mode · frame times |
 | dashboard, dashboard · Advanced | Game |
@@ -394,8 +393,8 @@ Observed strings include source-data examples so reviewers can audit every state
 | dashboard, log, settings, tray, welcome | Light (proposed) |
 | dashboard, dashboard · Advanced | Live trend paused. Waiting to reconnect. |
 | dashboard, dashboard · Advanced | Load over time |
-| dashboard | Load readings are still available. Open Settings to check setup, then restart FSPerf. |
-| dashboard | Load readings are still available. Restart FSPerf to try again. |
+| dashboard | Load readings are still available. Open Settings to check setup, then restart SVS Performance Monitor. |
+| dashboard | Load readings are still available. Restart SVS Performance Monitor to try again. |
 | dashboard | Load unavailable · basic |
 | dashboard, dashboard · Advanced | Loads and memory |
 | dashboard | Loads, memory, threads and plugins |
@@ -446,7 +445,7 @@ Observed strings include source-data examples so reviewers can audit every state
 | dashboard, dashboard · Advanced | shapesB=ok |
 | dashboard | Share / samples |
 | dashboard, log, settings, tray, welcome | SimVizion Studios |
-| dashboard, settings, tray, welcome | SimVizion Studios · FSPerf |
+| dashboard, settings, tray, welcome | SimVizion Studios · SVS Performance Monitor |
 | dashboard, log, settings, tray, welcome | Skip to content |
 | dashboard, dashboard · Advanced | Slowest 1% boundary · p99 |
 | dashboard, dashboard · Advanced | Snapshot 2026-11-08T10:51:44.6851037-09:00 · Mode basic · Attached false · Verdict waiting: the game is not running |
@@ -462,13 +461,14 @@ Observed strings include source-data examples so reviewers can audit every state
 | dashboard | Starting frame capture |
 | dashboard | Starting frame times |
 | dashboard, dashboard · Advanced | Status file written 2026-11-08T14:32:05-09:00. |
+| dashboard, log, settings, tray, welcome | SVS Performance Monitor |
 | dashboard, dashboard · Advanced | t3dBuild=1.25.1.0 Steam |
-| dashboard | The frame-times tool is missing. Check the files that came with FSPerf. |
+| dashboard | The frame-times tool is missing. Check the files that came with SVS Performance Monitor. |
 | dashboard | The game is waiting for graphics work to finish. Try lowering graphics settings, then compare the same place in the game. |
 | dashboard | The game is waiting for graphics work to finish. Try lowering graphics settings, then compare the same place in the game. This is an estimate from current loads. |
 | dashboard | The game may be holding a steady frame rate, showing a menu or loading. |
 | dashboard | The game needs more time to finish its calculations. Try reducing the number of active vehicles or objects, then compare the same place. |
-| dashboard | The last readings below are from 2:32:05 PM. Waiting to reconnect to the PC running FSPerf. |
+| dashboard | The last readings below are from 2:32:05 PM. Waiting to reconnect to the PC running SVS Performance Monitor. |
 | dashboard | The limit is changing |
 | dashboard | The readings are close. Keep playing in the same area to see a clearer pattern. This is an estimate from current loads. |
 | dashboard, dashboard · Advanced | The trend will begin when the game starts. |
@@ -592,8 +592,8 @@ Observed strings include source-data examples so reviewers can audit every state
 | log | Waiting for lines |
 | log | Waiting for lines… |
 | log | Warnings |
-| settings | Briefly pauses the game hundreds of times a second; a tiny cost. Leave off for timing-sensitive comparisons, or keep it the same for both runs. |
-| settings | Changing this address takes effect after FSPerf restarts. |
+| settings | Briefly pauses the game hundreds of times a second; it slows the game a little (a few percent). Leave off for timing-sensitive comparisons, or keep it the same for both runs. |
+| settings | Changing this address takes effect after SVS Performance Monitor restarts. |
 | settings | Farming Simulator settings folder |
 | settings | Found automatically. Change only if you use a different folder. |
 | settings | Frame times could not be set up |
@@ -607,7 +607,7 @@ Observed strings include source-data examples so reviewers can audit every state
 | settings | One more step |
 | settings | Only needed for the detailed mod breakdown. Windows asks once. |
 | settings | Open it in your usual browser. |
-| settings | Open the dashboard when FSPerf starts |
+| settings | Open the dashboard when SVS Performance Monitor starts |
 | settings | Permission cancelled |
 | settings | Permission was cancelled |
 | settings | Phone and home network |
@@ -618,20 +618,20 @@ Observed strings include source-data examples so reviewers can audit every state
 | settings | Run with full permissions |
 | settings | Sample error: account group update failed. No system changes were made. |
 | settings | Save changes |
-| settings | Settings can be changed on the PC running FSPerf |
+| settings | Settings can be changed on the PC running SVS Performance Monitor |
 | settings | Setup failed |
 | settings | Show frame times (FPS and stutter) |
 | settings | Show what the game’s main loop spends time on |
 | settings | Sign out of Windows and back in to finish setting up frame times. |
-| settings, welcome | Start FSPerf when Windows starts |
+| settings, welcome | Start SVS Performance Monitor when Windows starts |
 | settings | These values are read-only. You can select and copy the folder and port. |
 | settings | They can also see your game log, which shows your Windows user name and mod list. Use a trusted private home network. Windows will ask once. |
 | settings | This PC |
 | settings | This PC · not set up |
-| settings | Try again on the PC running FSPerf. Open Advanced for technical details. |
+| settings | Try again on the PC running SVS Performance Monitor. Open Advanced for technical details. |
 | settings | View |
 | settings | Viewing settings from another device. |
-| settings | Windows will ask for permission once, then sign out and back in. After that, FSPerf can show FPS without full permissions. |
+| settings | Windows will ask for permission once, then sign out and back in. After that, SVS Performance Monitor can show FPS without full permissions. |
 | settings | ⚠ Enter a whole number from 1 to 65535. |
 | tray | App icon |
 | tray | Exit |
@@ -647,11 +647,11 @@ Observed strings include source-data examples so reviewers can audit every state
 | tray | Waiting uses a neutral outline. Watching uses a green outline with a check. Read the verdict in the tooltip; tiny limit badges would be hard to tell apart. |
 | tray | Watching |
 | tray | Windows tray · design preview |
-| welcome | FSPerf shows whether your processor or graphics card is limiting Farming Simulator 25. It watches from outside the game, so nothing is added to the game. |
-| welcome | FSPerf stays in the notification area while it runs. |
 | welcome | Know what holds your game back. |
 | welcome | Open dashboard → |
 | welcome | Set up frame times |
 | welcome | Set up frame times to see how smoothly the game runs. Windows will ask for permission once, then sign out and back in. |
+| welcome | SVS Performance Monitor shows whether your processor or graphics card is limiting Farming Simulator 25. It watches from outside the game, so nothing is added to the game. |
+| welcome | SVS Performance Monitor stays in the notification area while it runs. |
 | welcome | Welcome · SimVizion Studios |
 | welcome | You can also do this later in Settings. |

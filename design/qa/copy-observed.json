@@ -40,7 +40,7 @@
     ]
   },
   {
-    "text": "Settings",
+    "text": "Game log",
     "pages": [
       "dashboard",
       "settings",
@@ -50,7 +50,7 @@
     ]
   },
   {
-    "text": "Game log",
+    "text": "Settings",
     "pages": [
       "dashboard",
       "settings",

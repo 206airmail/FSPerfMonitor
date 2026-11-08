@@ -70,6 +70,19 @@ public static class Program
 {
     public static readonly string Version = typeof(Program).Assembly.GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{v.Build}" : "?";  // = csproj <Version> (#11)
 
+    private const string Usage = """
+        SVS Performance Monitor - what limits Farming Simulator 25: processor or graphics card (SimVizion Studios)
+
+          SVSPerfMonitor                 the tray app (also a double-click on SVSPerfMonitor.exe); settings in its menu
+          SVSPerfMonitor --exit          stop the running tray app cleanly
+          SVSPerfMonitor --once          one JSON snapshot to stdout, for scripts and test runners
+          SVSPerfMonitor --record x.csv  a dashboard on the command line, plus one CSV line per second (Ctrl+C stops)
+          SVSPerfMonitor --no-browser    the same without a CSV
+
+          options: --port <n>  --lan  --interval-ms <ms>  --sample-hz <hz> (main-loop breakdown, 0 = off)
+                   --pid <n>  --profile <folder>  --seconds <n>  --presentmon <exe>  --no-frames  --tray
+        The command line never reads the tray app's settings. Help and source: https://github.com/206airmail/FSPerfMonitor
+        """;
     private const string TrayChildArg = "--tray-child";   // internal: the console-less copy the tray app restarted as
 
     public static int Main(string[] args)
@@ -100,6 +113,7 @@ public static class Program
         }
         if (args.Length == 1 && args[0] == "--logtail-selftest") return LogTailSelfTest.Run();   // self-test helper
         if (args.Length >= 2 && args[0] == "--admin") return AutoStart.AdminMain(args);   // the elevated helper (#7)
+        if (args.Length == 1 && args[0] is "--help" or "-h" or "/?") { Console.WriteLine(Usage); return 0; }
         if (args.Length == 3 && args[0] == "--task-xml") {   // self-test helper: the scheduled task's definition
             Console.WriteLine(AutoStart.TaskXml(AutoStart.CurrentUserSid(), AutoStart.StarterPath(), args[1] == "1", args[2]));
             return 0;

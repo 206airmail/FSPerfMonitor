@@ -1,0 +1,80 @@
+# Release: push a tag v<version> (= <Version> in src/FSPerf.csproj) -> build on a clean Windows machine, smoke-test,
+# package, and publish a GitHub Release with the zip and its SHA256. Manual runs ("Run workflow") build and upload the
+# zip as a workflow artifact only, without a release - for checking a build before tagging.
+# The full self-test (test/selftest.ps1) runs on a desktop PC before tagging: it starts tray apps and a capture session.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # create the release (tag runs only)
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Version matches the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $v = ([xml](Get-Content src/FSPerf.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          if ("v$v" -ne '${{ github.ref_name }}') { throw "tag ${{ github.ref_name }} but src/FSPerf.csproj says $v" }
+          "VERSION=$v" >> $env:GITHUB_ENV
+
+      - name: Build (native program, starter, PresentMon pinned by hash)
+        shell: powershell   # Windows PowerShell 5.1, as on players' and developers' PCs
+        run: ./build.ps1 -Publish -FetchPresentMon
+
+      - name: Smoke test the published program
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $help = & publish/SVSPerfMonitor.com --help
+          if ($LASTEXITCODE -ne 0 -or ($help -join "`n") -notmatch 'SVS Performance Monitor') { throw "--help failed" }
+          $j = & publish/SVSPerfMonitor.com --once --pid $PID --no-frames 2>$null | ConvertFrom-Json
+          if (-not $j.attached -or $j.pid -ne $PID) { throw "--once did not attach to the test process" }
+          $s = & publish/SVSPerfMonitor.exe --once --pid $PID --no-frames 2>$null | ConvertFrom-Json
+          if (-not $s.attached) { throw "the starter did not pass the command line through" }
+          $v = (Get-Item publish/SVSPerfMonitor.exe).VersionInfo
+          if ($v.ProductName -ne 'SVS Performance Monitor' -or $v.CompanyName -ne 'SimVizion Studios') { throw "starter version info: $($v.ProductName) / $($v.CompanyName)" }
+          "smoke test ok: $($v.ProductName) $($v.ProductVersion)"
+
+      - name: Package
+        shell: powershell
+        run: ./tools/package.ps1
+
+      - name: Upload the zip (every run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SVSPerfMonitor
+          path: |
+            dist/*.zip
+            dist/*.sha256
+
+      - name: Publish the release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = "dist/SVSPerfMonitor-$env:VERSION.zip"
+          $sha = (Get-Content "$zip.sha256").Split(' ')[0]
+          $notes = @"
+          **SVS Performance Monitor $env:VERSION** - shows what limits Farming Simulator 25 on your PC.
+
+          **Download:** SVSPerfMonitor-$env:VERSION.zip below. Unzip it anywhere, keep the files together, double-click **SVSPerfMonitor.exe**. README.txt in the zip explains the rest.
+
+          The program is not signed yet: if Windows says "Windows protected your PC", click *More info*, then *Run anyway*.
+
+          SHA256 of the zip: ``$sha``
+          "@
+          gh release create '${{ github.ref_name }}' $zip "$zip.sha256" --title "SVS Performance Monitor $env:VERSION" --notes $notes

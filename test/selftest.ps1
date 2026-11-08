@@ -168,6 +168,6 @@ try {
     Remove-Item $prof -Recurse -ErrorAction SilentlyContinue
 }
 
-if ($fails) { Write-Host "FSPERF SELFTEST: $fails failure(s)"; exit 1 }
-Write-Host "FSPERF SELFTEST OK"
+if ($fails) { Write-Host "SVSPERFMONITOR SELFTEST: $fails failure(s)"; exit 1 }
+Write-Host "SVSPERFMONITOR SELFTEST OK"
 exit 0

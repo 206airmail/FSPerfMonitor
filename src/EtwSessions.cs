@@ -78,7 +78,7 @@ public static class EtwSessions
             if (code != 0) { Log($"could not list ETW sessions (logman exit {code}); stale-session cleanup skipped"); return; }
             using var me = Process.GetCurrentProcess();
             foreach (var name in Stale(Parse(text), me.Id, IsLiveFsperf))
-                if (Stop(name)) Log($"stopped stale ETW session {name} (its fsperf is gone)");
+                if (Stop(name)) Log($"stopped stale ETW session {name} (its monitor process is gone)");
         } catch (Exception e) {
             Log("stale ETW session cleanup failed: " + e.Message);
         }

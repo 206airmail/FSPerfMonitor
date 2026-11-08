@@ -23,4 +23,4 @@ if ($Publish) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     if (Test-Path $pmFile) { Copy-Item $pmFile (Join-Path $PSScriptRoot 'publish') }  # full mode finds it next to SVSPerfMonitor.exe
 }
-Write-Host "FSPERF BUILD OK"
+Write-Host "SVSPERFMONITOR BUILD OK"

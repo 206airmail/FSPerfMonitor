@@ -195,7 +195,7 @@ function renderFrames(s) {
 
 function render(s) {
   if (!s || s.time === undefined) return;
-  $("status").textContent = s.attached ? `attached to ${s.process} (pid ${s.pid}), ${s.sampleHz ? s.mainThreadSamples + " samples this tick" : "main-thread breakdown off"}` : "waiting for the game";
+  $("status").textContent = s.attached ? `attached to ${s.process} (pid ${s.pid}), ${s.sampleHz === 0 ? "main-thread breakdown off" : s.mainThreadSamples + " samples this tick"}` : "waiting for the game";
   const v = $("verdict");
   v.textContent = s.verdict.label;
   v.style.background = css(verdictColor[s.verdict.label] || "--idle");

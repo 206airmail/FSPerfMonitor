@@ -265,7 +265,8 @@ $("join").onclick = () => {
   const err = $("invite-link-error"); err.hidden = true;
   let u;
   try { u = new URL($("invite-link").value.trim()); } catch { u = null; }
-  const code = u ? decodeURIComponent(u.hash.slice(1)) : "";
+  let code = "";
+  try { code = u ? decodeURIComponent(u.hash.slice(1)) : ""; } catch { code = ""; }
   if (!u || !/\/join\/?$/i.test(u.pathname) || !code || (u.protocol !== "https:" && u.protocol !== "http:")) {
     err.textContent = "⚠ Paste the whole invite link, like https://perf.example.com/join#…"; err.hidden = false; return;
   }

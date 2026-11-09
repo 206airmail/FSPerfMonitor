@@ -107,6 +107,11 @@ public static class Program
 
     public static int Main(string[] args)
     {
+        // an invite link (#18) before anything else: exactly `--tray --join <link>` or nothing happens at all
+        if (Invites.JoinInvocation(args) == "") {
+            TrayNative.MessageBoxW(IntPtr.Zero, "That link asked for more than joining a group, so it was ignored.", "SVS Performance Monitor", 0x30);
+            return 2;
+        }
         bool tray = args.Length == 0 || args.Contains("--tray") || args.Contains(TrayChildArg);
         // the tray app never keeps a console: started from a terminal it would block it (a console program), and on Windows
         // before 11 24H2 a double-click opens a console window. Then start a console-less copy and leave (a brief flash).
@@ -141,6 +146,12 @@ public static class Program
             return 0;
         }
         if (args.Length >= 1 && args[0] is "--group-add" or "--group-list" or "--group-remove") return GroupCommand(args);
+        if (args.Length == 1 && args[0] == "--check-join") {   // self-test helper (#18): stdin = one argument per line -> none | refused | <link>
+            var lines = Console.In.ReadToEnd().Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim('﻿')).ToArray();
+            string? r = Invites.JoinInvocation(lines);
+            Console.WriteLine(r == null ? "none" : r == "" ? "refused" : r);
+            return 0;
+        }
         if (args.Length == 1 && args[0] == "--parse-invite") {   // self-test helper (#18): stdin -> "<group>|<code>" or "no: why"
             Console.WriteLine(Invites.TryParse(Console.In.ReadToEnd(), out var g, out string ic, out string? why) ? $"{g!.AbsoluteUri}|{ic}" : "no: " + why);
             return 0;

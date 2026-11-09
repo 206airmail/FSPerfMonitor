@@ -162,7 +162,7 @@ public sealed class RelayMembers
         return Convert.ToHexString(SHA256.HashData(Encoding.ASCII.GetBytes(n)));
     }
 
-    private static string CleanName(string? name)
+    public static string CleanName(string? name)
     {
         string s = new string((name ?? "").Where(ch => !char.IsControl(ch)).ToArray()).Trim();
         return s.Length > MaxName ? s[..MaxName].Trim() : s;

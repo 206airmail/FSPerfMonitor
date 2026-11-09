@@ -14,7 +14,7 @@ public static unsafe class TrayApp
 {
     private const string Title = "SVS Performance Monitor";
     private const uint WM_TRAY = TrayNative.WM_APP + 1, WM_OPEN_REQUEST = TrayNative.WM_APP + 2, WM_EXIT_REQUEST = TrayNative.WM_APP + 3,
-        WM_SETTINGS_SAVED = TrayNative.WM_APP + 4, WM_JOIN_REQUEST = TrayNative.WM_APP + 5;
+        WM_SETTINGS_SAVED = TrayNative.WM_APP + 4;
     private const int CmdOpen = 1, CmdLog = 2, CmdSettings = 3, CmdStopSharing = 4, CmdExit = 9;
     private const nuint TimerId = 1, RestartTimerId = 2;
 
@@ -26,8 +26,6 @@ public static unsafe class TrayApp
 
     private static string OpenEventName(string instance) => $@"Local\{instance}.Open";
     private static string ExitEventName(string instance) => $@"Local\{instance}.Exit";
-    private static string JoinEventName(string instance) => $@"Local\{instance}.Join";
-    private static string JoinRequestFile => Path.Combine(Path.GetDirectoryName(SettingsStore.FilePath)!, "join-request.json");
     private static string MutexName(string instance) => $@"Local\{instance}.Running";
 
     private static string[] s_args = [];
@@ -56,18 +54,19 @@ public static unsafe class TrayApp
                 if (s.Port != was.Port && !AutoStart.PortFree(s.Port))
                     return $"Port {s.Port} is already used by another program. Choose another.";
                 s.HostSelfId = was.HostSelfId;   // managed here, never from the page
-                problem = ApplyHostSelf(was, s);   // #18: the host PC in its own group
-                if (problem != null) return problem;
+                var (hostProblem, hostCommit, hostRollback) = ApplyHostSelf(was, s);   // #18: the host PC in its own group
+                if (hostProblem != null) return hostProblem;
                 problem = ApplyStartup(was, s);   // may show a Windows permission prompt and wait for it
-                if (problem != null) return problem;
+                if (problem != null) { hostRollback?.Invoke(); return problem; }
                 // the firewall next: refused or failed = the network part keeps its old values, the rest (incl. the start-up
                 // just applied to Windows) is still saved, so file and Windows agree
                 string? netProblem = ApplyNetwork(was, s);
                 if (netProblem != null) { s.HomeNetwork = was.HomeNetwork; s.Port = was.Port; }
                 lock (s_settingsLock) {
-                    try { SettingsStore.Save(s); } catch (Exception e) { return "Could not save the settings: " + e.Message; }
+                    try { SettingsStore.Save(s); } catch (Exception e) { hostRollback?.Invoke(); return "Could not save the settings: " + e.Message; }
                     s_settings = s;
                 }
+                hostCommit?.Invoke();   // only now: the host's previous member (code) goes
                 bool restart = was.Port != s.Port || was.MainLoopBreakdown != s.MainLoopBreakdown || was.ProfileFolder != s.ProfileFolder
                     || was.RunWithFullPermissions != s.RunWithFullPermissions || was.HomeNetwork != s.HomeNetwork
                     || was.ShareWithGroup != s.ShareWithGroup || was.GroupAddress != s.GroupAddress || was.InviteCode != s.InviteCode
@@ -98,31 +97,37 @@ public static unsafe class TrayApp
     private static string s_instance = "SVSPerfMonitor";
 
     // #18 "Also share this PC" (host): this PC is a member of its own group and shares with it on 127.0.0.1, with a code
-    // nobody has to handle. Turned off: it stops sharing there (it stays a member; turning it on again reuses nothing
-    // stale: a fresh code each time it is set up).
-    private static string? ApplyHostSelf(AppSettings was, AppSettings now)
+    // nobody has to handle. Stop sharing / Leave / joining another group turn it off (an explicit stop must stick). The
+    // member is kept while its name stays; a rename adds the new member FIRST (a taken name fails before anything is
+    // lost) and removes the old one only after the settings are saved (commit); a failed save removes the new one (rollback).
+    private static (string? Problem, Action? Commit, Action? Rollback) ApplyHostSelf(AppSettings was, AppSettings now)
     {
+        if (now.HostSharesSelf && was.HostSharesSelf && was.ShareWithGroup && (!now.ShareWithGroup || now.GroupAddress != was.GroupAddress))
+            now.HostSharesSelf = false;
         string local = $"http://127.0.0.1:{now.GroupPort}";
         bool wasLocal = was.ShareWithGroup && ShareClient.ParseAddress(was.GroupAddress, out _) is { IsLoopback: true };
         if (!(now.HostGroup && now.HostSharesSelf)) {
             if (was.HostGroup && was.HostSharesSelf && wasLocal && now.GroupAddress == was.GroupAddress) now.ShareWithGroup = false;
-            return null;
-        }
-        // already set up for this port and name: nothing to do
-        if (was.HostSharesSelf && was.HostGroup && wasLocal && was.GroupPort == now.GroupPort && was.HostSelfName == now.HostSelfName
-            && now.HostSelfId.Length > 0) {
-            now.ShareWithGroup = true; now.GroupAddress = was.GroupAddress; now.InviteCode = was.InviteCode;
-            return null;
+            return (null, null, null);
         }
         var members = s_host?.GroupMembers ?? new RelayMembers(RelayMembers.DefaultFile);
-        if (now.HostSelfId.Length > 0) members.Remove(now.HostSelfId);   // a new code (name or port changed, or set up again)
-        var (m, code, problem) = members.Add(now.HostSelfName.Trim());
-        if (m == null) return "This PC couldn't join its own group: " + problem;
+        var existing = now.HostSelfId.Length > 0 ? members.Get(now.HostSelfId) : null;
+        string name = RelayMembers.CleanName(now.HostSelfName);   // as the members file keeps it (40 characters)
+        bool sameName = existing != null && string.Equals(existing.Name, name, StringComparison.OrdinalIgnoreCase);
+        if (sameName && members.Find(was.InviteCode)?.Id == existing!.Id) {
+            now.ShareWithGroup = true; now.GroupAddress = local; now.InviteCode = was.InviteCode;   // same member: maybe a new port
+            return (null, null, null);
+        }
+        // same name but its code is gone (after Leave, or another group): that member is of no use to anyone, replace it
+        if (sameName) { members.Remove(existing!.Id); now.HostSelfId = ""; }
+        var (m, code, problem) = members.Add(name);
+        if (m == null) return ("This PC couldn't join its own group: " + problem, null, null);
+        string oldId = now.HostSelfId;
         now.HostSelfId = m.Id;
         now.ShareWithGroup = true;
         now.GroupAddress = local;
         now.InviteCode = code;
-        return null;
+        return (null, () => { if (oldId.Length > 0 && oldId != m.Id) members.Remove(oldId); }, () => members.Remove(m.Id));
     }
 
     // "start with Windows" / "full permissions" changed: the Run entry and the scheduled task follow. The task needs a
@@ -213,10 +218,16 @@ public static unsafe class TrayApp
                 TrayNative.MessageBoxW(IntPtr.Zero, why ?? "That invite link can't be used.", Title, TrayNative.MB_ICONWARNING);
                 return 2;
             }
-            joinRequest = group!.AbsoluteUri + "\n" + code;
+            // written before anything else, so whichever copy runs (this one, one already running, one with full
+            // permissions that other copies can't signal) picks it up on its timer
+            try { Invites.WriteRequest(group!, code); }
+            catch { TrayNative.MessageBoxW(IntPtr.Zero, "The invite couldn't be passed on. Paste the invite link in Settings instead.", Title, TrayNative.MB_ICONWARNING); return 1; }
+            joinRequest = "1";
             s_args = args = args.Where(x => x != "--join" && x != o.Join).ToArray();
             o.Join = null;
         }
+        // the invite link type follows the copy the user runs (only the real tray app, never a protected copy)
+        if (o.Instance == "SVSPerfMonitor" && !AutoStart.RunsFromProtectedDir()) Invites.RegisterLinkType(AutoStart.StarterPath());
         // started by the full-permissions task: only from the protected copy in Program Files (the task never points
         // anywhere else; if something did, refuse to run elevated from a folder the user can write)
         if (AutoStart.IsElevated() && args.Contains("--handover") && !AutoStart.RunsFromProtectedDir()) {
@@ -239,22 +250,14 @@ public static unsafe class TrayApp
         bool first;
         try { mutex = new Mutex(true, MutexName(o.Instance), out first); }
         catch (UnauthorizedAccessException) {   // the running copy has full permissions: its objects are out of our reach
-            if (openOnSecondStart) OpenUrl(settingsUrl);
+            if (openOnSecondStart && joinRequest == null) OpenUrl(settingsUrl);   // (an invite: it finds the request itself)
             return 0;
         }
         using var mutexScope = mutex;
         if (!first && args.Contains("--handover")) {   // the copy we take over from is quitting: wait for it
             try { first = mutex.WaitOne(15000); } catch (AbandonedMutexException) { first = true; }
         }
-        if (!first && joinRequest != null) {   // already running: that copy asks the user and joins
-            try {
-                File.WriteAllText(JoinRequestFile, joinRequest);
-                if (EventWaitHandle.TryOpenExisting(JoinEventName(o.Instance), out var j)) using (j) { j.Set(); return 0; }
-            } catch { }
-            TrayNative.MessageBoxW(IntPtr.Zero, "SVS Performance Monitor is running but couldn't take the invite. Paste the invite link in Settings instead.",
-                Title, TrayNative.MB_ICONWARNING);
-            return 1;
-        }
+        if (!first && joinRequest != null) return 0;   // already running: it finds the request and asks the user
         if (!first) {   // already running: let that copy open its dashboard (it knows its port and runs as the right user)
             bool asked = false;
             try {
@@ -268,7 +271,7 @@ public static unsafe class TrayApp
             && AutoStart.ProtectedCopyReady(o.Instance) && AutoStart.RunTask(o.Instance)) {
             mutex.ReleaseMutex();   // the elevated copy (--handover) waits for it
             if (WaitForPort(o.Port, 20000)) {
-                if (!o.NoBrowser) OpenUrl(settingsUrl);
+                if (!o.NoBrowser && joinRequest == null) OpenUrl(settingsUrl);
                 return 0;
             }
             // the elevated copy didn't come up: run here after all (unless it took over meanwhile)
@@ -286,9 +289,6 @@ public static unsafe class TrayApp
             }
             using var openEvt = new EventWaitHandle(false, EventResetMode.AutoReset, OpenEventName(o.Instance));
             using var exitEvt = new EventWaitHandle(false, EventResetMode.AutoReset, ExitEventName(o.Instance));
-            using var joinEvt = new EventWaitHandle(false, EventResetMode.AutoReset, JoinEventName(o.Instance));
-            // the invite link type follows the copy the user runs (only the real tray app, never a protected copy)
-            if (o.Instance == "SVSPerfMonitor" && !AutoStart.RunsFromProtectedDir()) Invites.RegisterLinkType(AutoStart.StarterPath());
             using var quitWatcher = new ManualResetEvent(false);
 
             if (!CreateWindow()) return 4;
@@ -300,21 +300,18 @@ public static unsafe class TrayApp
 
             // named events from other copies (open the dashboard / quit) arrive on this thread, then go to the window
             var watcher = new Thread(() => {
-                var hs = new WaitHandle[] { openEvt, exitEvt, quitWatcher, joinEvt };
+                var hs = new WaitHandle[] { openEvt, exitEvt, quitWatcher };
                 try {
                     while (true) {
                         int i = WaitHandle.WaitAny(hs);
                         if (i == 2) return;
-                        TrayNative.PostMessageW(s_hwnd, i == 0 ? WM_OPEN_REQUEST : i == 3 ? WM_JOIN_REQUEST : WM_EXIT_REQUEST, IntPtr.Zero, IntPtr.Zero);
+                        TrayNative.PostMessageW(s_hwnd, i == 0 ? WM_OPEN_REQUEST : WM_EXIT_REQUEST, IntPtr.Zero, IntPtr.Zero);
                         if (i == 1) return;
                     }
                 } catch (ObjectDisposedException) { }   // shutting down
             }) { IsBackground = true, Name = "svsperf-tray-events" };
             watcher.Start();
-            if (joinRequest != null) {   // started by an invite link: ask now (and no dashboard of its own)
-                try { File.WriteAllText(JoinRequestFile, joinRequest); TrayNative.PostMessageW(s_hwnd, WM_JOIN_REQUEST, IntPtr.Zero, IntPtr.Zero); } catch { }
-                o.NoBrowser = true;
-            }
+            if (joinRequest != null) o.NoBrowser = true;   // started by an invite link: the question comes, no dashboard
             try {
                 if (!o.NoBrowser) OpenUrl(s_host.Url + (s_settings.WelcomeShown ? "" : "welcome"));   // the very first start: the welcome
 
@@ -336,43 +333,68 @@ public static unsafe class TrayApp
     }
 
     // ---- joining a group by invite link (#18) ----
-    private static int s_joining;   // one question at a time
+    private static int s_joining;   // one question at a time; the next request waits for it
 
-    // the request a link brought (group address + code, in the settings folder): ask the user, then share
-    private static void HandleJoin()
+    // every second (the tray timer): a request an invite link left, taken one at a time
+    private static void PollJoin()
     {
-        string req;
-        try { req = File.ReadAllText(JoinRequestFile); File.Delete(JoinRequestFile); } catch { return; }
-        var parts = req.Split('\n');
-        if (parts.Length != 2 || ShareClient.ParseAddress(parts[0], out _) is not { } group || RelayMembers.Normalize(parts[1]).Length != 24) return;
-        string code = parts[1].Trim();
-        // who the group knows us as (also: is the code still good?)
-        string name = "", where = group.Authority;
+        Invites.ExpireRequests();   // also while a question is open: no invite code lies around for long
+        if (Volatile.Read(ref s_joining) != 0) return;
+        var req = Invites.TakeRequest();
+        if (req == null) return;
+        Interlocked.Exchange(ref s_joining, 1);
+        var (group, code) = req.Value;
+        ThreadPool.QueueUserWorkItem(_ => { try { HandleJoin(group, code); } finally { Volatile.Write(ref s_joining, 0); } });
+    }
+
+    // ask the user, then share. The group may be anyone's server (a link is easy to send), so the question names WHERE
+    // the logs go on a line of its own; the name that server sends is cleaned and only shown as its claim.
+    private static void HandleJoin(Uri group, string code)
+    {
+        string where = group.GetLeftPart(UriPartial.Authority), name = "";
         bool reachable = true;
         try {
             using var http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false, ConnectTimeout = TimeSpan.FromSeconds(8) }) { Timeout = TimeSpan.FromSeconds(10) };
             using var q = new HttpRequestMessage(HttpMethod.Get, new Uri(group, "/api/whoami"));
             q.Headers.TryAddWithoutValidation("Authorization", "Bearer " + code);
-            using var r = http.Send(q);
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));   // the whole answer, body included
+            using var r = http.Send(q, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
             if (r.StatusCode == System.Net.HttpStatusCode.Unauthorized) {
-                TrayNative.MessageBoxW(IntPtr.Zero, $"The group at {where} doesn't accept this invite any more. Ask its host for a new one.", Title, TrayNative.MB_ICONWARNING);
+                TrayNative.MessageBoxW(IntPtr.Zero, $"The group at {where} doesn't accept this invite (any more). Ask its host for a new one.", Title, TrayNative.MB_ICONWARNING);
                 return;
             }
-            using var doc = System.Text.Json.JsonDocument.Parse(new StreamReader(r.Content.ReadAsStream()).ReadToEnd());
-            if (doc.RootElement.TryGetProperty("name", out var n) && n.ValueKind == System.Text.Json.JsonValueKind.String) name = n.GetString() ?? "";
+            if (r.IsSuccessStatusCode) {
+                // at most 4 KB: an answer is a few bytes, a hostile server must not fill this PC's memory
+                using var st = r.Content.ReadAsStream();
+                var buf = new byte[4096];
+                int got = 0, n;
+                while (got < buf.Length && (n = st.ReadAsync(buf.AsMemory(got), deadline.Token).AsTask().GetAwaiter().GetResult()) > 0) got += n;
+                if (got < buf.Length) {
+                    using var doc = System.Text.Json.JsonDocument.Parse(buf.AsMemory(0, got));
+                    if (doc.RootElement.TryGetProperty("name", out var nm) && nm.ValueKind == System.Text.Json.JsonValueKind.String) name = Invites.CleanName(nm.GetString());
+                }
+            } else reachable = false;
         } catch { reachable = false; }
-        var cur = s_backend.Current;
-        string replacing = cur.ShareWithGroup && cur.GroupAddress.Length > 0 && ShareClient.ParseAddress(cur.GroupAddress, out _) is { } old && old.Authority != group.Authority
-            ? $"\n\nThis replaces sharing with {old.Authority}." : "";
-        string text = $"Share this PC's game log and performance with the group at {where}{(name.Length > 0 ? $" as \"{name}\"" : "")}?\n\n" +
-            "Everyone in that group can watch them while SVS Performance Monitor runs. Your Windows user name, computer name and " +
-            "personal folders are removed first. You can stop any time from this icon." + replacing +
-            (reachable ? "" : "\n\n(The group can't be reached right now. Sharing starts when it can.)");
-        if (TrayNative.MessageBoxW(IntPtr.Zero, text, Title, 0x4 /* MB_YESNO */ | 0x20 /* MB_ICONQUESTION */ | 0x10000 /* MB_SETFOREGROUND */) != 6 /* IDYES */) return;
-        cur.ShareWithGroup = true;
-        cur.GroupAddress = group.GetLeftPart(UriPartial.Authority);
-        cur.InviteCode = code;
-        string? problem = s_backend.Save(cur);
+        var before = s_backend.Current;
+        string replacing = before.ShareWithGroup && ShareClient.ParseAddress(before.GroupAddress, out _) is { } old && old.Authority != group.Authority
+            ? $"\n\nThis replaces sharing with {old.GetLeftPart(UriPartial.Authority)}." : "";
+        string text = "Share this PC with a group?\n\n" +
+            $"Group: {where}\n" + (name.Length > 0 ? $"Your name there (as the group says): {name}\n" : "") +
+            "\nEveryone in that group can watch this PC's game logs and performance while SVS Performance Monitor runs. " +
+            "Your Windows user name, computer name and personal folders are removed first. You can stop any time from this icon." +
+            replacing + (reachable ? "" : "\n\nThe group can't be reached right now; sharing starts when it can.") +
+            "\n\nOnly answer Yes if you asked to join this group.";
+        // No is the default: a stray Enter must never share (Codex #18)
+        if (TrayNative.MessageBoxW(IntPtr.Zero, text, Title, 0x4 /* MB_YESNO */ | 0x20 /* MB_ICONQUESTION */ | 0x100 /* MB_DEFBUTTON2 */ | 0x10000 /* MB_SETFOREGROUND */) != 6 /* IDYES */) return;
+        // only the sharing fields change, on the settings as they are NOW (the user may have changed others meanwhile)
+        string? problem;
+        lock (s_saveLock) {
+            var cur = s_backend.Current;
+            cur.ShareWithGroup = true;
+            cur.GroupAddress = where;
+            cur.InviteCode = code;
+            problem = s_backend.Save(cur);
+        }
         if (problem != null) { TrayNative.MessageBoxW(IntPtr.Zero, "Sharing could not be turned on: " + problem, Title, TrayNative.MB_ICONWARNING); return; }
         s_backend.Saved();   // restarts the monitor, sharing
     }
@@ -444,7 +466,7 @@ public static unsafe class TrayApp
                     return IntPtr.Zero;
                 case TrayNative.WM_TIMER:
                     if ((nuint)wParam == RestartTimerId) { TrayNative.KillTimer(hwnd, RestartTimerId); RestartMonitor(); }
-                    else Refresh();
+                    else { Refresh(); PollJoin(); }
                     return IntPtr.Zero;
                 case WM_SETTINGS_SAVED:
                     // a moment's delay: the page's request has been answered, its connection may still be closing
@@ -452,9 +474,6 @@ public static unsafe class TrayApp
                     return IntPtr.Zero;
                 case WM_OPEN_REQUEST:
                     OpenUrl(DashboardUrl());
-                    return IntPtr.Zero;
-                case WM_JOIN_REQUEST:
-                    if (Interlocked.Exchange(ref s_joining, 1) == 0) ThreadPool.QueueUserWorkItem(_ => { try { HandleJoin(); } finally { Volatile.Write(ref s_joining, 0); } });
                     return IntPtr.Zero;
                 case WM_EXIT_REQUEST:
                     TrayNative.DestroyWindow(hwnd);

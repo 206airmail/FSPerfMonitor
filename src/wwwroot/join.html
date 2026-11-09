@@ -24,8 +24,10 @@
 "use strict";
 const $ = id => document.getElementById(id);
 // the code: from the fragment (kept in this page only, never in the address bar once read)
-const code = decodeURIComponent((location.hash || "").slice(1)).trim();
-history.replaceState(null, "", "/join");
+const rawCode = (location.hash || "").slice(1);
+history.replaceState(null, "", "/join");   // first: whatever follows, the code leaves the address bar and history
+let code = "";
+try { code = decodeURIComponent(rawCode).trim(); } catch { code = ""; }
 function fail(title, text) { $("title").textContent = title; $("intro").textContent = text; }
 (async () => {
   if (!code) { fail("This invite link is incomplete", "Ask your group’s host to send it again."); return; }

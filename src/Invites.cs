@@ -52,6 +52,70 @@ public static class Invites
         return true;
     }
 
+    // A web page picks an svsperf: link's text, and some launchers may let it break out of its quotes. So whenever the
+    // command line mentions joining at all, it must be EXACTLY `--tray --join <one link>` (+ the internal --tray-child):
+    // checked first thing in Main, before any option does anything (Codex #18: --exit, a UNC --settings path...).
+    // null = not a join; "" = a join, but malformed (refuse); else the link.
+    public static string? JoinInvocation(string[] args)
+    {
+        bool mentions = args.Any(a => a.Equals("--join", StringComparison.OrdinalIgnoreCase)
+                                   || a.Contains(Scheme + ":", StringComparison.OrdinalIgnoreCase));
+        if (!mentions) return null;
+        var a2 = args.Length > 0 && args[^1] == "--tray-child" ? args[..^1] : args;
+        return a2.Length == 3 && a2[0] == "--tray" && a2[1] == "--join" && a2[2].StartsWith(Scheme + "://", StringComparison.OrdinalIgnoreCase)
+            && !a2[2].Any(char.IsControl) ? a2[2] : "";
+    }
+
+    // the requests an invite link brought, one file each in the settings folder (join\<time>-<id>.req: "<group>\n<code>"),
+    // picked up by whichever copy runs (also one with full permissions, which other copies can't signal); read once,
+    // then deleted; older than 5 minutes = deleted unread
+    public static string RequestDir => Path.Combine(Path.GetDirectoryName(SettingsStore.FilePath)!, "join");
+
+    public static void WriteRequest(Uri group, string code)
+    {
+        Directory.CreateDirectory(RequestDir);
+        string file = Path.Combine(RequestDir, $"{DateTime.UtcNow.Ticks:D19}-{Guid.NewGuid():N}.req");
+        string tmp = file + ".tmp";
+        File.WriteAllText(tmp, group.AbsoluteUri + "\n" + code);
+        File.Move(tmp, file);   // complete or not there at all
+    }
+
+    // requests (and half-written files) older than 5 minutes go unread: called every second, also while a question is open
+    public static void ExpireRequests()
+    {
+        try {
+            if (!Directory.Exists(RequestDir)) return;
+            foreach (var f in Directory.GetFiles(RequestDir))
+                try { if (DateTime.UtcNow - File.GetLastWriteTimeUtc(f) > TimeSpan.FromMinutes(5)) File.Delete(f); } catch { }
+        } catch { }
+    }
+
+    // the oldest waiting request (deleted as it is taken), or null
+    public static (Uri Group, string Code)? TakeRequest()
+    {
+        try {
+            if (!Directory.Exists(RequestDir)) return null;
+            foreach (var f in Directory.GetFiles(RequestDir, "*.req").OrderBy(f => f, StringComparer.Ordinal)) {
+                string text;
+                try { text = File.ReadAllText(f); File.Delete(f); } catch { continue; }
+                var parts = text.Split('\n');
+                if (parts.Length == 2 && ShareClient.ParseAddress(parts[0], out _) is { } g && RelayMembers.Normalize(parts[1]).Length == 24)
+                    return (g, parts[1].Trim());
+            }
+        } catch { }
+        return null;
+    }
+
+    // a name another server sent: shown in our own question, so no line breaks, control or direction characters, short
+    public static string CleanName(string? name)
+    {
+        var s = new string((name ?? "").Where(ch => char.GetUnicodeCategory(ch) is not (System.Globalization.UnicodeCategory.Control
+            or System.Globalization.UnicodeCategory.Format or System.Globalization.UnicodeCategory.LineSeparator
+            or System.Globalization.UnicodeCategory.ParagraphSeparator or System.Globalization.UnicodeCategory.Surrogate
+            or System.Globalization.UnicodeCategory.PrivateUse or System.Globalization.UnicodeCategory.OtherNotAssigned)).ToArray()).Trim();
+        return s.Length > 40 ? s[..40].Trim() + "…" : s;
+    }
+
     // registers svsperf: for this Windows user, pointing at this copy's starter (`--tray --join "<link>"`: the starter
     // starts the tray app, which hands the request to a running copy). Refreshed at every start, so it follows the copy
     // the user runs. Only the real tray app does this (the self-test's instances use other names).

@@ -203,6 +203,21 @@ Check ($jp -match 'svsperf://join/' -and $jp -match '/api/signin') "invite: the 
 $who = try { (Invoke-WebRequest 'http://127.0.0.1:8792/api/whoami' -Headers @{ Authorization = "Bearer $($addr.code)" } -UseBasicParsing).Content | ConvertFrom-Json } catch { $null }
 $who401 = try { $null = Invoke-WebRequest 'http://127.0.0.1:8792/api/whoami' -Headers @{ Authorization = 'Bearer AAAA-BBBB-CCCC-DDDD-EEEE-FFFF' } -UseBasicParsing; 200 } catch { [int]$_.Exception.Response.StatusCode }
 Check ($who.name -eq 'Friend' -and $who401 -eq 401) "invite: the app can ask who a code belongs to (and a wrong code gets 401)"
+# "Stop sharing" on the host (the page sends sharing off, the tick still on) must stick (Codex #18)
+$script:tok = (WaitUp 8794).token
+$bStop = $b6.TrimEnd('}') + ',"shareWithGroup":false,"groupAddress":"http://127.0.0.1:8792","inviteCode":"' + $v6.settings.inviteCode + '"}'
+$vs = $null
+if ((Post 'http://127.0.0.1:8794/api/settings' $bStop 'http://127.0.0.1:8794') -eq 200) { Start-Sleep -Milliseconds 1500; $vs = WaitUp 8794 }
+Check ($vs -and -not $vs.settings.shareWithGroup -and -not $vs.settings.hostSharesSelf -and $vs.sharing -eq 'off') "host: Stop sharing sticks (it also turns 'Also share this PC' off)"
+$script:tok = $vs.token
+# after Leave (address and code cleared), "Also share this PC" works again under the same name (Codex #18 re-check)
+$bLeave = $b6.Replace('"hostSharesSelf":true', '"hostSharesSelf":false').TrimEnd('}') + ',"shareWithGroup":false,"groupAddress":"","inviteCode":""}'
+$vl = $null
+if ((Post 'http://127.0.0.1:8794/api/settings' $bLeave 'http://127.0.0.1:8794') -eq 200) { Start-Sleep -Milliseconds 1200; $vl = WaitUp 8794; $script:tok = $vl.token }
+$vr = $null
+if ($vl -and (Post 'http://127.0.0.1:8794/api/settings' $b6 'http://127.0.0.1:8794') -eq 200) { for ($i = 0; $i -lt 20 -and -not ($vr -and $vr.sharing -eq 'sharing'); $i++) { Start-Sleep -Milliseconds 500; $vr = WaitUp 8794 } }
+Check ($vr -and $vr.settings.shareWithGroup -and @($vr.members | Where-Object name -eq 'Host').Count -eq 1 -and $vr.sharing -eq 'sharing') "host: after Leave, 'Also share this PC' works again under the same name ($($vr.sharing))"
+$script:tok = $vr.token
 $b7 = $b6.Replace('"hostSharesSelf":true', '"hostSharesSelf":false')
 $v7 = $null
 if ((Post 'http://127.0.0.1:8794/api/settings' $b7 'http://127.0.0.1:8794') -eq 200) { Start-Sleep -Milliseconds 1500; $v7 = WaitUp 8794 }
@@ -350,6 +365,18 @@ foreach ($c in @(@('https://perf.example.com/join#abcd-efgh-jkmn-pqrs-tuvw-xyz2'
     $got = (& { $ErrorActionPreference = 'Continue'; $c[0] | & $exe --parse-invite 2>$null }) -join ''
     $ok = if ($c[1] -eq 'no') { $got -like 'no:*' } else { $got -eq $c[1] }
     Check $ok "invite link: [$($c[0] -replace '#.*', '#…' -replace '&c=.*', '&c=…')] -> $($got -replace '\|.*', '|…')"
+}
+
+# an invite link's command line must be exactly --tray --join <link> (a web page picks the link text)
+$okLink = 'svsperf://join/?a=https%3A%2F%2Fperf.example.com&c=ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2'
+foreach ($c in @(@(@('--tray', '--join', $okLink), $okLink), @(@('--tray', '--join', $okLink, '--tray-child'), $okLink),
+                 @(@('--tray', '--join', 'svsperf://join/?a=x"', '--exit', '--join', '"svsperf:x'), 'refused'),
+                 @(@('--tray', '--join', $okLink, '--settings', '\\attacker\share\s.json'), 'refused'),
+                 @(@('--settings', '\\attacker\share\s.json', '--tray', '--join', $okLink), 'refused'),
+                 @(@('--tray', '--join', 'https://perf.example.com/join#x'), 'refused'), @(@('--no-browser', 'svsperf://x'), 'refused'),
+                 @(@('--tray', '--no-browser'), 'none'))) {
+    $got = (& { $ErrorActionPreference = 'Continue'; ($c[0] -join "`n") | & $exe --check-join 2>$null }) -join ''
+    Check ($got -eq $c[1]) "invite command line: [$($c[0] -join ' ' -replace '&c=.*', '&c=…')] -> $($got -replace '&c=.*', '&c=…')"
 }
 
 # 0.6 dedicated server (#17): the game with -server is a server: no frame capture, a main-thread verdict

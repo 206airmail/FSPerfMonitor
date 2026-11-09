@@ -14,11 +14,11 @@
 <section class="verdict" aria-labelledby="verdict"><div class="eyebrow" id="eyebrow">Farming Simulator 25</div><h2 id="verdict">Connecting…</h2><p id="reason"></p>
 <div class="metrics"><div class="metric"><div class="metric-label" id="m1-label">FPS</div><div class="metric-value" id="fps">—</div><div class="meta" id="m1-meta">Frames each second</div></div><div class="metric"><div class="metric-label" id="m2-label">1% low</div><div class="metric-value" id="low">—</div><div class="meta" id="m2-meta">A guide to the slowest frames</div></div><div class="metric"><div class="metric-label" id="m3-label">Frame time</div><div class="metric-value" id="ft">—</div><div class="meta" id="m3-meta">Average · lower is smoother</div></div></div></section>
 <div id="frame-banner" class="banner" style="margin-top:16px" hidden></div>
-<section class="card trend" id="trend" hidden><div class="row between"><h2 id="trend-title">Frame times</h2><span class="meta" id="trend-unit">Last 5 minutes · milliseconds</span></div><div id="frame-chart"></div><div class="legend" id="trend-legend"><span>Frame time</span><span class="cpu">Processor work – dashed</span><span class="gpu">Graphics work · dotted</span></div><p class="meta" id="trend-summary"></p></section>
+<section class="card trend" id="trend" hidden><div class="row between"><h2 id="trend-title">Frame times</h2><span class="meta" id="trend-unit">Last 5 minutes · milliseconds</span></div><div id="frame-chart"></div><div class="legend" id="trend-legend"></div><p class="meta" id="trend-summary"></p></section>
 <details class="small"><summary>What does this mean?</summary><p id="explain-server" hidden>A dedicated server runs the whole farm (vehicles, workers, physics, the players’ actions) on one main thread, and draws no picture. When that thread is busy almost all the time, the server falls behind and every player feels it. The other processor cores and the graphics card don’t help here; fewer workers, vehicles and heavy mods do.</p><div id="explain-game"><p>FPS counts frames each second. Higher usually feels smoother. Frame time is how long each frame takes; lower is better. The 1% low helps you spot uneven performance even when the average FPS looks good.</p><p style="margin-top:8px">The verdict is a guide for this moment. A frame rate cap, a menu or loading can change it. Compare the same place in the game when testing a change.</p></div></details>
 <details id="advanced"><summary>Advanced <span class="meta">Loads, memory, threads and plugins</span></summary><div class="advanced-grid">
 <section class="card panel span-all"><div class="row between"><h2>Loads and memory</h2><span class="meta" id="process"></span></div><div class="readout" id="loads"></div></section>
-<section class="card panel span-all"><div class="row between"><h2>Load over time</h2><span class="meta">Last 5 minutes · percent</span></div><div id="load-chart"></div><div class="legend"><span class="cpu">Main thread busy – dashed</span><span class="gpu">GPU 3D · dotted</span></div></section>
+<section class="card panel span-all"><div class="row between"><h2>Load over time</h2><span class="meta">Last 5 minutes · percent</span></div><div id="load-chart"></div><div class="legend" id="load-legend"></div></section>
 <section class="card panel span-all"><h2>Per-frame detail</h2><div class="readout" id="frame-details"></div><p class="meta" id="capture-note" style="margin-top:12px"></p></section>
 <section class="card panel"><h2 class="section-head">Main thread: where the time goes</h2><table><thead><tr><th scope="col">Module / kind</th><th scope="col" class="numeric">Share / samples</th></tr></thead><tbody id="modules"></tbody></table><p class="meta" id="sampling" style="margin-top:12px"></p><p class="small" style="margin-top:8px">A plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.</p></section>
 <section class="card panel"><h2 class="section-head">Busiest game threads</h2><table><thead><tr><th scope="col">Thread ID</th><th scope="col" class="numeric">Busy · one core</th></tr></thead><tbody id="threads"></tbody></table></section>
@@ -98,18 +98,57 @@ function stateOf(s) {
 const HISTORY = 300;
 let frameHist = [], loadHist = [], last = null, connected = false, lastTime = null;
 
+// the frame chart's top: the 98th percentile of every line plus headroom, on a round step, so one loading stutter
+// can't squash everything else into the bottom pixels (higher spikes are cut off at the top and the summary says so)
+function frameScale(values) {
+  const v = values.filter(finite).sort((a, b) => a - b);
+  if (!v.length) return 20;
+  const target = Math.max(10, v[Math.floor(0.98 * (v.length - 1))] * 1.15);
+  return [10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 300, 400, 500].find(s => s >= target) || Math.ceil(target / 500) * 500;
+}
+
+// the legends are buttons: a click turns that line off or on (remembered in this browser); hidden lines leave the scale too
+const hiddenLines = { "frame-chart": new Set(), "load-chart": new Set() };
+try { const saved = JSON.parse(localStorage.getItem("svsperf.hiddenLines") || "{}"); for (const k in hiddenLines) for (const c of saved[k] || []) hiddenLines[k].add(c); } catch { }
+function legend(el, chartId, items) {
+  const key = chartId + "|" + items.map(i => i.join(":")).join("|");
+  if (el.dataset.key !== key) {                           // rebuilt only when it changes: a click or keyboard focus survives the 1 s updates
+    el.dataset.key = key;
+    el.innerHTML = items.map(([cls, text]) => `<button type="button" class="${cls}" data-chart="${chartId}" data-line="${cls}" title="Show or hide this line">${esc(text)}</button>`).join("");
+  }
+  el.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(!hiddenLines[chartId].has(b.dataset.line))));
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest(".legend button[data-line]");
+  if (!b) return;
+  const set = hiddenLines[b.dataset.chart];
+  set.has(b.dataset.line) ? set.delete(b.dataset.line) : set.add(b.dataset.line);
+  try { localStorage.setItem("svsperf.hiddenLines", JSON.stringify(Object.fromEntries(Object.entries(hiddenLines).map(([k, v]) => [k, [...v]])))); } catch { }
+  if (last) render(last);
+});
+const shown = (chartId, series) => series.filter(s => !hiddenLines[chartId].has(s[0]));
+
+// series: [cls, points, area?]: an area series is drawn as a shaded band with a thin edge, so a line lying on it stays visible
 function chart(el, series, max, label) {
+  series = shown(el.id, series);
   const width = Math.max(240, el.clientWidth || 940), right = width - 8, n = HISTORY - 1;
   const y = v => 125 - Math.max(0, Math.min(max, v)) / max * 112;
-  const paths = series.map(([cls, pts]) => {
-    let d = "", pen = false;
+  const paths = series.map(([cls, pts, area]) => {
+    let d = "", fill = "", run = [];
     const off = HISTORY - pts.length;
+    const flush = () => {
+      if (run.length) {
+        d += run.map((p, k) => `${k ? "L" : "M"}${p} `).join("");
+        if (area) fill += `M${run[0].split(",")[0]},125 ` + run.map(p => `L${p} `).join("") + `L${run[run.length - 1].split(",")[0]},125 Z `;
+      }
+      run = [];
+    };
     pts.forEach((v, i) => {
-      if (!finite(v)) { pen = false; return; }               // a gap, never a zero
-      d += `${pen ? "L" : "M"}${(40 + (off + i) * (right - 40) / n).toFixed(1)},${y(v).toFixed(1)} `;
-      pen = true;
+      if (!finite(v)) { flush(); return; }                    // a gap, never a zero
+      run.push(`${(40 + (off + i) * (right - 40) / n).toFixed(1)},${y(v).toFixed(1)}`);
     });
-    return d ? `<path class="${cls}" d="${d}"/>` : "";
+    flush();
+    return (fill ? `<path class="${cls}-area" d="${fill}"/>` : "") + (d ? `<path class="${cls}" d="${d}"/>` : "");
   }).join("");
   const grid = [0, max / 2, max].map(v => `<line class="grid" x1="40" x2="${right}" y1="${y(v)}" y2="${y(v)}"/><text x="0" y="${y(v) + 4}">${v}</text>`).join("");
   el.innerHTML = `<svg class="chart" viewBox="0 0 ${width} 155" role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>${grid}${paths}<text x="40" y="151">−5 min</text><text x="${right - 32}" y="151">Now</text></svg>`;
@@ -163,18 +202,20 @@ function render(s) {
   if (server) {
     $("trend").hidden = !loadHist.length;
     $("trend-title").textContent = "Server main thread"; $("trend-unit").textContent = "Last 5 minutes · percent";
-    $("trend-legend").innerHTML = '<span class="cpu">Main thread busy – dashed</span>';
+    legend($("trend-legend"), "frame-chart", [["cpu", "Main thread busy – dashed"]]);
     if (loadHist.length) chart($("frame-chart"), [["cpu", loadHist.map(p => p[0])]], 100, "Server main thread busy in percent, last 5 minutes");
     $("trend-summary").textContent = `Now: ${number(s.mainThreadBusyPct, 0)}% · above 90% the server can’t keep up.`;
   } else {
     $("trend-title").textContent = "Frame times"; $("trend-unit").textContent = "Last 5 minutes · milliseconds";
-    $("trend-legend").innerHTML = '<span>Frame time</span><span class="cpu">Processor work – dashed</span><span class="gpu">Graphics work · dotted</span>';
+    legend($("trend-legend"), "frame-chart", [["frame", "Frame time – shaded"], ["cpu", "Processor work – dashed"], ["gpu", "Graphics work · dotted"]]);
   }
   if (!server) $("trend").hidden = !frameHist.some(p => finite(p[0]));
   if (!server && !$("trend").hidden) {
-    const maxFt = Math.max(40, Math.ceil(Math.max(...frameHist.map(p => finite(p[0]) ? p[0] : 0)) / 10) * 10);
-    chart($("frame-chart"), [["frame", frameHist.map(p => p[0])], ["cpu", frameHist.map(p => p[1])], ["gpu", frameHist.map(p => p[2])]], maxFt, "Frame times in milliseconds, last 5 minutes");
-    $("trend-summary").textContent = full ? `Now: average ${number(f.frameTimeAvgMs)} ms · slowest 1% boundary ${number(f.frameTimeP99Ms)} ms.` : "No frame times right now.";
+    const lines = [["frame", frameHist.map(p => p[0]), true], ["cpu", frameHist.map(p => p[1])], ["gpu", frameHist.map(p => p[2])]];
+    const all = shown("frame-chart", lines).flatMap(s => s[1]), maxFt = frameScale(all), clipped = all.some(v => finite(v) && v > maxFt);
+    chart($("frame-chart"), lines, maxFt, "Frame times in milliseconds, last 5 minutes");
+    $("trend-summary").textContent = (full ? `Now: average ${number(f.frameTimeAvgMs)} ms · processor ${number(f.cpuBusyMs)} ms · graphics ${number(f.gpuBusyMs)} ms · slowest 1% boundary ${number(f.frameTimeP99Ms)} ms.` : "No frame times right now.")
+      + (clipped ? ` Spikes above ${maxFt} ms are cut off at the top.` : "");
   }
 
   // Advanced
@@ -186,6 +227,7 @@ function render(s) {
     readout("VRAM · game", s.attached ? fmt(finite(s.gpuDedicatedMb) ? s.gpuDedicatedMb / 1024 : null, "GiB") : "—", "Dedicated graphics memory") +
     readout("RAM · game", s.attached ? fmt(finite(s.workingSetMb) ? s.workingSetMb / 1024 : null, "GiB") : "—", "Working set") +
     readout("Private memory", s.attached ? fmt(finite(s.privateMb) ? s.privateMb / 1024 : null, "GiB") : "—", "Committed private bytes");
+  legend($("load-legend"), "load-chart", [["cpu", "Main thread busy – dashed"], ["gpu", "GPU 3D · dotted"]]);
   if ($("advanced").open) {
     if (loadHist.length) chart($("load-chart"), [["cpu", loadHist.map(p => p[0])], ["gpu", loadHist.map(p => p[1])]], 100, "Processor and graphics load in percent, last 5 minutes");
     else $("load-chart").innerHTML = '<p class="meta" style="padding-block:24px">The trend will begin when the game starts.</p>';

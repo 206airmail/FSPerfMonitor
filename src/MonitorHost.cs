@@ -49,7 +49,7 @@ public sealed class MonitorHost : IDisposable
             }
             if (!string.IsNullOrEmpty(o.ShareUrl) && !string.IsNullOrEmpty(o.ShareCode)) {
                 var relay = ShareClient.ParseAddress(o.ShareUrl, out string? why);
-                if (relay != null) { _share = new ShareClient(relay, o.ShareCode, _tail, () => _latest); }
+                if (relay != null) { _share = new ShareClient(relay, o.ShareCode, _tail, () => _latest, o.Port); }
                 else _shareProblem = why ?? "bad address";
             }
         } catch {

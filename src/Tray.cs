@@ -468,8 +468,12 @@ public static unsafe class TrayApp
             "both near the limit" => "Your processor and graphics card are both near the limit",
             "neither" => "Neither is the limit right now",
             "mixed" => "The limit is changing",
+            "server-ok" => "The server keeps up",
+            "server-busy" => "The server is busy",
+            "server-limit" => "The server is at its limit",
             _ => "Watching the game",
         };
+        if (s.Server) what += $" · main thread {s.MainThreadBusyPct:0}%";
         var f = s.Frames;
         if (f != null && f.State == "running" && f.Frames > 0 && f.Fps > 0) what += $" · {f.Fps:0} FPS";
         return (true, what);

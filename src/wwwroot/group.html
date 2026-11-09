@@ -5,7 +5,7 @@
      with their live dashboard and game log (/s/<id>/, /s/<id>/log). Data: GET /api/group, POST /api/signin, /api/signout. -->
 </head>
 <body data-page="group"><a class="skip" href="#main">Skip to content</a>
-<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios · Group</div></div></a><nav aria-label="Main navigation"><a href="/" aria-current="page">Group</a></nav></div></header>
+<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios · Group</div></div></a><nav aria-label="Main navigation"><a href="/" aria-current="page">Group</a><a id="my-settings" hidden title="SVS Performance Monitor's settings on this PC">Settings</a></nav></div></header>
 <main id="main" class="wrap form-page">
 <div class="page-title"><h1>Group</h1><span class="tag" id="me" hidden></span></div>
 <div id="notice" role="status" class="banner" hidden></div>
@@ -45,6 +45,10 @@ function link(href, text) { const a = document.createElement("a"); a.className =
 function show(g) {
   $("signin").hidden = true; $("group").hidden = false;
   $("me").textContent = "Signed in as " + g.me; $("me").hidden = false;
+  // this member's own PC shares: its settings page (opened on THIS computer; settings never change through the group)
+  const port = Number.isInteger(g.myPort) && g.myPort > 0 ? g.myPort : 0;
+  $("my-settings").hidden = !port;
+  if (port) $("my-settings").href = "http://127.0.0.1:" + port + "/settings";
   const list = $("sharing");
   list.textContent = "";
   for (const s of g.sharing) {
@@ -55,6 +59,7 @@ function show(g) {
     since.textContent = "Sharing since " + new Date(s.since).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = s.away ? "Quiet" : "Live";
     row.append(since, tag);
+    if (s.server) { const t2 = document.createElement("span"); t2.className = "tag"; t2.textContent = "Dedicated server"; row.append(t2); }
     const actions = document.createElement("div"); actions.className = "row"; actions.style.marginTop = "10px";
     const base = "/s/" + encodeURIComponent(s.id) + "/";
     actions.append(link(base, "Dashboard"), link(base + "log", "Game log"));

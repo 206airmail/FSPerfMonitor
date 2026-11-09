@@ -319,6 +319,18 @@ try {
     Remove-Item $prof -Recurse -ErrorAction SilentlyContinue
 }
 
+# 0.6 dedicated server (#17): the game with -server is a server: no frame capture, a main-thread verdict
+foreach ($c in @(@('"C:\Games\FS25\FarmingSimulator2025Game.exe" -server -autoStartSavegameId 1', 'server'), @('game.exe -serverWithGui', 'server'),
+                 @('"D:\my-server stuff\game.exe" -name x', 'game'), @('game.exe -servers', 'game'), @('game.exe', 'game'))) {
+    $got = (& { $ErrorActionPreference = 'Continue'; $c[0] | & $exe --is-server-cmdline 2>$null }) -join ''
+    Check ($got -eq $c[1]) "server detection: [$($c[0])] -> $got (want $($c[1]))"
+}
+$sb = Start-Process $exe -ArgumentList '--burn', '10', '-server' -PassThru -WindowStyle Hidden
+Start-Sleep -Milliseconds 700
+$sj = Json $exe @('--once', '--pid', $sb.Id, '--interval-ms', '2000')
+Check ($sj.server -eq $true -and $sj.verdict.label -eq 'server-limit' -and $null -eq $sj.frames) "a busy process started with -server = a dedicated server at its limit, no frame capture ($($sj.verdict.label))"
+if (-not $sb.HasExited) { Stop-Process -Id $sb.Id -ErrorAction SilentlyContinue }
+
 # 0.6 group relay (#14): a relay on 127.0.0.1:8796 and a copy sharing a temp log with it, on this PC only
 $gdir = Join-Path $env:TEMP ('svsperf_selftest_group_' + [guid]::NewGuid().ToString('N').Substring(0, 6))
 New-Item -ItemType Directory $gdir | Out-Null
@@ -360,7 +372,8 @@ try {
     $gj = $grp.body | ConvertFrom-Json
     Check ($grp.code -eq '200' -and $gj.me -eq 'Tester One' -and @($gj.sharing).Count -eq 1 -and $gj.sharing[0].id -eq $gid) "group: the sharer is listed"
     $dash = GReq GET "/s/$gid/" $null @($gcookie)
-    Check ($dash.code -eq '200' -and $dash.body -match 'data-relay="1"' -and $dash.body -notmatch 'href="/settings"' -and $dash.body -match 'Tester One') "group: the member's dashboard (their name, no Settings)"
+    Check ($dash.code -eq '200' -and $dash.body -match 'data-relay="1"' -and $dash.body -notmatch 'href="/settings"' -and $dash.body -match 'Tester One') "group: the member's dashboard (their name, no relay Settings)"
+    Check ($dash.body -match 'href="http://127\.0\.0\.1:8795/settings"' -and ($gj.PSObject.Properties.Name -contains 'myPort') -and $gj.myPort -eq 8795) "group: 'Settings' opens the viewer's own PC's settings page (its dashboard port 8795), never through the group"
     Check ((GReq GET "/s/$gid/log/stream").code -eq '401') "group: a member's live log needs a sign-in"
     $glog = (curl.exe -sN --max-time 2 -H $gcookie "$gbase/s/$gid/log/stream?n=50") -join "`n"
     Check ($glog -match 'group first line' -and $glog -match 'alert\(1\)') "group: the shared log arrives through the relay"

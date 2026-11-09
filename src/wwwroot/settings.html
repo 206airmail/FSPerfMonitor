@@ -6,7 +6,7 @@
      with Windows, frame-times setup, full permissions; #9 home network) are shown but not changeable yet. -->
 </head>
 <body data-page="settings"><a class="skip" href="#main">Skip to content</a>
-<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a href="/">Dashboard</a><a href="/log">Game log</a><a href="/settings" aria-current="page">Settings</a></nav></div></header>
+<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a id="nav-group" hidden>Group</a><a href="/">Dashboard</a><a href="/log">Game log</a><a href="/settings" aria-current="page">Settings</a></nav></div></header>
 <main id="main" class="wrap form-page">
 <div class="page-title"><h1>Settings</h1><span class="tag" id="settings-origin">This PC</span></div>
 <div id="settings-notice" role="status" class="banner" hidden></div>
@@ -51,6 +51,17 @@
 <div class="toast" id="toast" role="status" hidden><button aria-label="Dismiss message" id="dismiss">×</button><span id="toast-text"></span></div>
 <script>
 "use strict";
+
+// "Group" in the menu while this PC shares with a group: back to the group's pages (#14)
+if (document.documentElement.dataset.relay !== "1") fetch("/api/settings", { cache: "no-store" }).then(r => r.json()).then(v => {
+  const s = v.settings || {}, a = document.getElementById("nav-group");
+  if (!a || !s.shareWithGroup || !s.groupAddress) return;
+  try {
+    const u = new URL(s.groupAddress.includes("://") ? s.groupAddress : "https://" + s.groupAddress);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return;
+    a.href = u.origin + "/"; a.hidden = false;
+  } catch { }
+}).catch(() => { });
 const $ = id => document.getElementById(id);
 let view = null;
 

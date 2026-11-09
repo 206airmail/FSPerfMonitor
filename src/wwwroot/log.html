@@ -6,7 +6,7 @@
      twice). Lines are always inserted as text, never as HTML. -->
 </head>
 <body class="log-page" data-page="log"><a class="skip" href="#main">Skip to content</a>
-<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a href="./">Dashboard</a><a href="log" aria-current="page">Game log</a><a href="/settings">Settings</a></nav></div></header>
+<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a id="nav-group" hidden>Group</a><a href="./">Dashboard</a><a href="log" aria-current="page">Game log</a><a href="/settings">Settings</a></nav></div></header>
 <main id="main" class="wrap"><div class="page-title"><h1>Game log</h1><span class="status" id="log-status" role="status"></span></div>
 <div class="log-tools"><label for="filter" class="small">Find text in the log</label><input id="filter" type="search" placeholder="Filter lines…" autocomplete="off" autocapitalize="off" spellcheck="false">
 <div class="row between"><div class="filters"><button id="bErr" aria-pressed="false">Errors</button><button id="bWarn" aria-pressed="false">Warnings</button><button id="bFail" aria-pressed="false">FAIL</button></div><div class="actions"><button id="pause" aria-pressed="false">Pause</button><button id="clear">Clear</button><a class="button" id="download" href="log/download" download title="Save the lines kept for this log as a text file">Download</a></div></div>
@@ -16,6 +16,16 @@
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
+// "Group" in the menu while this PC shares with a group: back to the group's pages (#14)
+if (document.documentElement.dataset.relay !== "1") fetch("/api/settings", { cache: "no-store" }).then(r => r.json()).then(v => {
+  const s = v.settings || {}, a = document.getElementById("nav-group");
+  if (!a || !s.shareWithGroup || !s.groupAddress) return;
+  try {
+    const u = new URL(s.groupAddress.includes("://") ? s.groupAddress : "https://" + s.groupAddress);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return;
+    a.href = u.origin + "/"; a.hidden = false;
+  } catch { }
+}).catch(() => { });
 const KEEP = 10000, DOMCAP = 3000, PARAM_N = 500;
 const logEl = $("log");
 let model = [];            // {seq, text, cls}; the last KEEP lines received

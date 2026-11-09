@@ -18,6 +18,7 @@ public sealed class ShareClient : IDisposable
     private readonly string _code;
     private readonly LogTail _tail;
     private readonly Func<Snapshot?> _snapshot;
+    private readonly int _localPort;   // this PC's dashboard: the relay offers its Settings link to this member
     private readonly HttpClient _http;
     private readonly CancellationTokenSource _quit = new();   // Dispose: also cancels a send in progress
     private Thread? _thread;
@@ -29,8 +30,9 @@ public sealed class ShareClient : IDisposable
     public volatile string State = "connecting";
     public volatile string MemberName = "";
 
-    public ShareClient(Uri relay, string code, LogTail tail, Func<Snapshot?> snapshot)
+    public ShareClient(Uri relay, string code, LogTail tail, Func<Snapshot?> snapshot, int localPort = 0)
     {
+        _localPort = localPort;
         _push = new Uri(relay, "/api/push");
         _stop = new Uri(relay, "/api/stop");
         _code = code;
@@ -91,7 +93,7 @@ public sealed class ShareClient : IDisposable
         if (lines.Count > _maxLines) lines = lines.GetRange(0, _maxLines);   // the oldest first: the rest follows
         var sb = new StringBuilder(256 + lines.Count * 120);
         sb.Append("{\"epoch\":").Append(JsonSerializer.Serialize(epoch, FsperfJson.Default.String))
-          .Append(",\"after\":").Append(after).Append(",\"snapshot\":");
+          .Append(",\"after\":").Append(after).Append(",\"port\":").Append(_localPort).Append(",\"snapshot\":");
         var snap = _snapshot();
         // relaxed escaping keeps non-ASCII letters as they are, so the redaction sees "Jörg", not "J\u00F6rg"
         sb.Append(snap != null ? Redactor.Apply(JsonSerializer.Serialize(snap, FsperfJson.RelaxedSnapshot)) : "null");

@@ -13,7 +13,7 @@ public sealed record Snapshot(
     DateTime Time, string Mode, bool Attached, int Pid, string Process, double ProcessCpuPct, int Cores, double MainThreadBusyPct,
     List<ThreadLoad> TopThreads, double Gpu3DPct, double GpuDedicatedMb, double WorkingSetMb, double PrivateMb,
     List<MainThreadSampler.Share> MainThreadModules, long MainThreadSamples, FspStatusInfo Fsp, Verdict Verdict, string Note,
-    FrameStats? Frames, bool Elevated, int SampleHz);
+    FrameStats? Frames, bool Elevated, int SampleHz, bool Server = false);   // Server: a dedicated server (-server), #17
 
 public sealed class Collector : IDisposable
 {
@@ -26,6 +26,7 @@ public sealed class Collector : IDisposable
     private Process? _proc;
     private IntPtr _procHandle;
     private int _mainTid;
+    private bool _server;   // the attached game is a dedicated server (its command line has -server / -serverWithGui)
     private DateTime _lastModules = DateTime.MinValue;
     private TimeSpan _lastProcCpu;
     private DateTime _lastTick;
@@ -62,6 +63,7 @@ public sealed class Collector : IDisposable
         _modules.Refresh(_procHandle, Path.GetFileName(SafeMainModule(_proc)));
         _lastModules = DateTime.UtcNow;
         if (_mainTid != 0) _sampler.Start((uint)_mainTid);
+        _server = IsServerCommandLine(Native.CommandLine(_procHandle));
         _lastProcCpu = SafeCpu(_proc);
         _lastTick = DateTime.UtcNow;
         _lastThreadCpu.Clear();
@@ -86,6 +88,16 @@ public sealed class Collector : IDisposable
         _proc?.Dispose();
         _proc = null;
         _mainTid = 0;
+        _server = false;
+    }
+
+    // the game's own test (dataS/scripts/main.lua: StartParams.getIsSet("server") or "serverWithGui"): a whole argument,
+    // any case; a quoted path that merely contains "-server" doesn't count
+    public static bool IsServerCommandLine(string? cmd)
+    {
+        if (string.IsNullOrEmpty(cmd)) return false;
+        return System.Text.RegularExpressions.Regex.IsMatch(cmd, @"(^|\s)-(server|serverWithGui)(?=\s|$)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
     }
 
     private Snapshot Waiting(FspStatusInfo fsp, string why) =>
@@ -153,14 +165,22 @@ public sealed class Collector : IDisposable
         var (gpu3d, vram) = _gpu.Sample(p.Id);
         double ws = 0, priv = 0;
         try { p.Refresh(); ws = p.WorkingSet64 / 1048576.0; priv = p.PrivateMemorySize64 / 1048576.0; } catch { }
-        _frames?.Ensure(p.Id);
-        var frames = _frames?.TakeWindow(wall);
+        // a dedicated server draws nothing: no frame capture (no PresentMon), and its verdict is the simulation's
+        if (!_server) _frames?.Ensure(p.Id);
+        var frames = _server ? null : _frames?.TakeWindow(wall);
         bool full = frames != null && frames.State == "running" && frames.Frames > 0;
-        var verdict = (full ? FrameMonitor.Judge(frames!) : null) ?? Judge(mainBusy, gpu3d);
+        var verdict = _server ? JudgeServer(mainBusy) : (full ? FrameMonitor.Judge(frames!) : null) ?? Judge(mainBusy, gpu3d);
         string note = _sampler.Hz == 0 || _sampler.Running ? "" : "main-thread sampler not running (thread access denied?)";
         return new Snapshot(DateTime.Now, full ? "full" : "basic", true, p.Id, p.ProcessName, procPct, Environment.ProcessorCount, mainBusy, top, gpu3d,
-            vram, ws, priv, shares, samples, fsp, verdict, note, frames, _elevated, _sampler.Hz);
+            vram, ws, priv, shares, samples, fsp, verdict, note, frames, _elevated, _sampler.Hz, _server);
     }
+
+    // a dedicated server: everything the farm does runs on its main thread. Near 100% of one core it can't keep up and
+    // the players feel it (lag, vehicles jumping); the GPU doesn't matter.
+    public static Verdict JudgeServer(double mainBusy) =>
+        mainBusy >= 90 ? new Verdict("server-limit", $"main thread {mainBusy:0}% busy: the simulation can't keep up")
+        : mainBusy >= 70 ? new Verdict("server-busy", $"main thread {mainBusy:0}% busy")
+        : new Verdict("server-ok", $"main thread {mainBusy:0}% busy");
 
     // basic mode (no frame events): the main thread's busy share against the GPU's 3D load.
     //   main >= 90 and GPU < 85 -> CPU-bound;  GPU >= 90 and main < 85 -> GPU-bound;  both high -> both near the limit;

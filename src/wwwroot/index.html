@@ -7,15 +7,15 @@
      waiting resets the histories; a lost connection keeps the last readings, clearly marked as old. -->
 </head>
 <body data-page="dashboard"><a class="skip" href="#main">Skip to content</a>
-<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a href="./" aria-current="page">Dashboard</a><a href="log">Game log</a><a href="/settings">Settings</a></nav></div></header>
+<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a id="nav-group" hidden>Group</a><a href="./" aria-current="page">Dashboard</a><a href="log">Game log</a><a href="/settings">Settings</a></nav></div></header>
 <main id="main" class="wrap">
 <div class="page-title"><h1>Dashboard</h1><div class="row"><span class="status" id="game-status"></span><span class="tag" id="mode"></span></div></div>
 <p id="announce" role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap"></p>
-<section class="verdict" aria-labelledby="verdict"><div class="eyebrow">Farming Simulator 25</div><h2 id="verdict">Connecting…</h2><p id="reason"></p>
-<div class="metrics"><div class="metric"><div class="metric-label">FPS</div><div class="metric-value" id="fps">—</div><div class="meta">Frames each second</div></div><div class="metric"><div class="metric-label">1% low</div><div class="metric-value" id="low">—</div><div class="meta">A guide to the slowest frames</div></div><div class="metric"><div class="metric-label">Frame time</div><div class="metric-value" id="ft">—</div><div class="meta">Average · lower is smoother</div></div></div></section>
+<section class="verdict" aria-labelledby="verdict"><div class="eyebrow" id="eyebrow">Farming Simulator 25</div><h2 id="verdict">Connecting…</h2><p id="reason"></p>
+<div class="metrics"><div class="metric"><div class="metric-label" id="m1-label">FPS</div><div class="metric-value" id="fps">—</div><div class="meta" id="m1-meta">Frames each second</div></div><div class="metric"><div class="metric-label" id="m2-label">1% low</div><div class="metric-value" id="low">—</div><div class="meta" id="m2-meta">A guide to the slowest frames</div></div><div class="metric"><div class="metric-label" id="m3-label">Frame time</div><div class="metric-value" id="ft">—</div><div class="meta" id="m3-meta">Average · lower is smoother</div></div></div></section>
 <div id="frame-banner" class="banner" style="margin-top:16px" hidden></div>
-<section class="card trend" id="trend" hidden><div class="row between"><h2>Frame times</h2><span class="meta">Last 5 minutes · milliseconds</span></div><div id="frame-chart"></div><div class="legend"><span>Frame time</span><span class="cpu">Processor work – dashed</span><span class="gpu">Graphics work · dotted</span></div><p class="meta" id="trend-summary"></p></section>
-<details class="small"><summary>What does this mean?</summary><p>FPS counts frames each second. Higher usually feels smoother. Frame time is how long each frame takes; lower is better. The 1% low helps you spot uneven performance even when the average FPS looks good.</p><p style="margin-top:8px">The verdict is a guide for this moment. A frame rate cap, a menu or loading can change it. Compare the same place in the game when testing a change.</p></details>
+<section class="card trend" id="trend" hidden><div class="row between"><h2 id="trend-title">Frame times</h2><span class="meta" id="trend-unit">Last 5 minutes · milliseconds</span></div><div id="frame-chart"></div><div class="legend" id="trend-legend"><span>Frame time</span><span class="cpu">Processor work – dashed</span><span class="gpu">Graphics work · dotted</span></div><p class="meta" id="trend-summary"></p></section>
+<details class="small"><summary>What does this mean?</summary><p id="explain-server" hidden>A dedicated server runs the whole farm (vehicles, workers, physics, the players’ actions) on one main thread, and draws no picture. When that thread is busy almost all the time, the server falls behind and every player feels it. The other processor cores and the graphics card don’t help here; fewer workers, vehicles and heavy mods do.</p><div id="explain-game"><p>FPS counts frames each second. Higher usually feels smoother. Frame time is how long each frame takes; lower is better. The 1% low helps you spot uneven performance even when the average FPS looks good.</p><p style="margin-top:8px">The verdict is a guide for this moment. A frame rate cap, a menu or loading can change it. Compare the same place in the game when testing a change.</p></div></details>
 <details id="advanced"><summary>Advanced <span class="meta">Loads, memory, threads and plugins</span></summary><div class="advanced-grid">
 <section class="card panel span-all"><div class="row between"><h2>Loads and memory</h2><span class="meta" id="process"></span></div><div class="readout" id="loads"></div></section>
 <section class="card panel span-all"><div class="row between"><h2>Load over time</h2><span class="meta">Last 5 minutes · percent</span></div><div id="load-chart"></div><div class="legend"><span class="cpu">Main thread busy – dashed</span><span class="gpu">GPU 3D · dotted</span></div></section>
@@ -29,6 +29,17 @@
 <footer class="wrap footer"><span>SimVizion Studios · SVS Performance Monitor</span><span>Watches the game from outside. Nothing is added to the game.</span></footer>
 <script>
 "use strict";
+
+// "Group" in the menu while this PC shares with a group: back to the group's pages (#14)
+if (document.documentElement.dataset.relay !== "1") fetch("/api/settings", { cache: "no-store" }).then(r => r.json()).then(v => {
+  const s = v.settings || {}, a = document.getElementById("nav-group");
+  if (!a || !s.shareWithGroup || !s.groupAddress) return;
+  try {
+    const u = new URL(s.groupAddress.includes("://") ? s.groupAddress : "https://" + s.groupAddress);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return;
+    a.href = u.origin + "/"; a.hidden = false;
+  } catch { }
+}).catch(() => { });
 const PRODUCT = "SVS Performance Monitor";
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -45,6 +56,10 @@ const verdictCopy = {
   "mixed": ["The limit is changing", "The readings are close. Keep playing in the same area to see a clearer pattern."],
   "unknown": ["There is not enough information yet", "Graphics readings are unavailable. The other readings are still shown below."],
   "waiting": ["Waiting for the game", "Start Farming Simulator 25. This page will pick it up automatically."],
+  // a dedicated server (#17): the simulation runs on its main thread; there is no picture, so no FPS
+  "server-ok": ["The server keeps up", "The server’s main thread has time to spare. Players should not notice any lag from the server."],
+  "server-busy": ["The server is busy", "The server’s main thread is working hard. More vehicles, workers or players may start to cause lag."],
+  "server-limit": ["The server is at its limit", "The server’s main thread can’t keep up. Players will notice lag and vehicles jumping. Fewer workers, vehicles or mods help."],
 };
 const banners = {
   setup: ["See FPS and spot stutter", "Set up frame times on this PC. Windows will ask for permission once, then sign out and back in.", "Set up", "/settings#frame-times"],
@@ -69,6 +84,7 @@ if (!RELAY) fetch("/api/settings", { cache: "no-store" }).then(r => r.json()).th
 function stateOf(s) {
   if (!connected) return "disconnected";
   if (!s.attached) return "waiting";
+  if (s.server) return "server";                             // no frame times on a dedicated server: no banner
   const f = s.frames;
   if (!f) return "basic";                                    // started with --no-frames
   if (f.state === "running") return f.frames > 0 ? "full" : "no-frames";
@@ -113,22 +129,48 @@ function render(s) {
     $("reason").textContent = (lastTime ? "The last readings below are from " + lastTime.toLocaleTimeString() + ". " : "") + "Waiting to reconnect to the PC running " + PRODUCT + ".";
   } else {
     $("verdict").textContent = copy[0];
-    $("reason").textContent = copy[1] + (s.attached && !full ? " This is an estimate from current loads." : "");
+    $("reason").textContent = copy[1] + (s.attached && !full && !s.server ? " This is an estimate from current loads." : "");
   }
-  $("game-status").innerHTML = `<i class="dot ${!active ? "wait" : ""}" aria-hidden="true"></i>${st === "disconnected" ? "Reconnecting…" : active ? "Watching the game" : "Ready when you are"}`;
+  $("game-status").innerHTML = `<i class="dot ${!active ? "wait" : ""}" aria-hidden="true"></i>${st === "disconnected" ? "Reconnecting…" : active ? (s.server ? "Watching the server" : "Watching the game") : "Ready when you are"}`;
   announce($("verdict").textContent);
-  $("mode").textContent = full ? "Frame times on" : "Loads only";
-  $("fps").textContent = full ? number(f.fps) : "—";
-  $("low").textContent = full ? number(f.low1PctFps) : "—";
-  $("ft").innerHTML = full ? `${number(f.frameTimeAvgMs)} <span class="unit">ms</span>` : "—";
+  const server = s.attached && s.server;
+  $("eyebrow").textContent = server ? "Farming Simulator 25 · Dedicated server" : "Farming Simulator 25";
+  $("explain-server").hidden = !server; $("explain-game").hidden = server;
+  $("mode").textContent = server ? "Dedicated server" : full ? "Frame times on" : "Loads only";
+  if (server) {
+    // the three big numbers: what matters on a server
+    $("m1-label").textContent = "Main thread"; $("m1-meta").textContent = "The simulation · of one core";
+    $("m2-label").textContent = "Game processor"; $("m2-meta").textContent = `Across ${s.cores} logical cores`;
+    $("m3-label").textContent = "Memory"; $("m3-meta").textContent = "The game’s working set";
+    $("fps").innerHTML = `${number(s.mainThreadBusyPct, 0)} <span class="unit">%</span>`;
+    $("low").innerHTML = `${number(s.processCpuPct, 0)} <span class="unit">%</span>`;
+    $("ft").innerHTML = finite(s.workingSetMb) ? `${number(s.workingSetMb / 1024)} <span class="unit">GiB</span>` : "—";
+  } else {
+    $("m1-label").textContent = "FPS"; $("m1-meta").textContent = "Frames each second";
+    $("m2-label").textContent = "1% low"; $("m2-meta").textContent = "A guide to the slowest frames";
+    $("m3-label").textContent = "Frame time"; $("m3-meta").textContent = "Average · lower is smoother";
+    $("fps").textContent = full ? number(f.fps) : "—";
+    $("low").textContent = full ? number(f.low1PctFps) : "—";
+    $("ft").innerHTML = full ? `${number(f.frameTimeAvgMs)} <span class="unit">ms</span>` : "—";
+  }
 
   const b = banners[st];
   $("frame-banner").hidden = !b;
   if (b) $("frame-banner").innerHTML = `<span class="symbol" aria-hidden="true">ⓘ</span><div><strong>${esc(b[0])}</strong><p class="small">${esc(b[1])}</p></div>${b[2] && !RELAY ? `<div class="actions"><a class="button primary" href="${b[3]}">${esc(b[2])}</a></div>` : ""}`;
 
-  // frame-time trend (only with frame times)
-  $("trend").hidden = !frameHist.some(p => finite(p[0]));
-  if (!$("trend").hidden) {
+  // the trend: frame times in a game; on a server, its main thread
+  if (server) {
+    $("trend").hidden = !loadHist.length;
+    $("trend-title").textContent = "Server main thread"; $("trend-unit").textContent = "Last 5 minutes · percent";
+    $("trend-legend").innerHTML = '<span class="cpu">Main thread busy – dashed</span>';
+    if (loadHist.length) chart($("frame-chart"), [["cpu", loadHist.map(p => p[0])]], 100, "Server main thread busy in percent, last 5 minutes");
+    $("trend-summary").textContent = `Now: ${number(s.mainThreadBusyPct, 0)}% · above 90% the server can’t keep up.`;
+  } else {
+    $("trend-title").textContent = "Frame times"; $("trend-unit").textContent = "Last 5 minutes · milliseconds";
+    $("trend-legend").innerHTML = '<span>Frame time</span><span class="cpu">Processor work – dashed</span><span class="gpu">Graphics work · dotted</span>';
+  }
+  if (!server) $("trend").hidden = !frameHist.some(p => finite(p[0]));
+  if (!server && !$("trend").hidden) {
     const maxFt = Math.max(40, Math.ceil(Math.max(...frameHist.map(p => finite(p[0]) ? p[0] : 0)) / 10) * 10);
     chart($("frame-chart"), [["frame", frameHist.map(p => p[0])], ["cpu", frameHist.map(p => p[1])], ["gpu", frameHist.map(p => p[2])]], maxFt, "Frame times in milliseconds, last 5 minutes");
     $("trend-summary").textContent = full ? `Now: average ${number(f.frameTimeAvgMs)} ms · slowest 1% boundary ${number(f.frameTimeP99Ms)} ms.` : "No frame times right now.";
@@ -151,7 +193,7 @@ function render(s) {
   $("frame-details").innerHTML = fields.map(([l, k]) => readout(l, full ? fmt(f[k], "ms") : "—")).join("") +
     readout("Frames this interval", full ? number(f.frames, 0) : "—") +
     readout("Presentation / runtime", full ? `${f.presentMode || "—"} / ${f.runtime || "—"}` : "—");
-  $("capture-note").textContent = `Capture: ${f ? f.state : "disabled"}${f && f.hint ? " · " + f.hint : ""}. ${s.elevated ? "Full Windows permissions" : "Standard Windows permissions"}.`;
+  $("capture-note").textContent = server ? "A dedicated server draws no picture, so there are no frame times." : `Capture: ${f ? f.state : "disabled"}${f && f.hint ? " · " + f.hint : ""}. ${s.elevated ? "Full Windows permissions" : "Standard Windows permissions"}.`;
   const mods = s.mainThreadModules || [];
   $("modules").innerHTML = mods.length
     ? mods.map(m => `<tr><td>${esc(m.name)}<div class="meta">${esc(m.kind)}</div></td><td class="numeric">${number(m.percent)}%<div class="meta">${esc(m.samples)} samples</div></td></tr>`).join("")

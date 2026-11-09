@@ -199,6 +199,7 @@ public sealed class RelayServer : IDisposable
         public readonly EventHub Events = new(8);
         public readonly LogHub Logs;
         public string Epoch = "";      // the sharer's own log epoch: a new one = their app restarted
+        public int Port;               // their PC's dashboard port: "Settings on this PC" for this member's own browsers
         public long LastSeq;           // the newest line of theirs we have (their numbering)
         public DateTime Since = DateTime.UtcNow, LastPush = DateTime.MinValue;   // LastPush: the last ACCEPTED push
         public Share(string id, string name) { MemberId = id; Name = name; Logs = new LogHub(LogTail.Detached(RingLines), 8); }
@@ -373,8 +374,8 @@ public sealed class RelayServer : IDisposable
                 return false;
             }
             switch (sub) {
-                case "": Send(stream, 200, "text/html; charset=utf-8", MemberPage(_dashPage, s.Name)); return false;
-                case "log": Send(stream, 200, "text/html; charset=utf-8", MemberPage(_logPage, s.Name)); return false;
+                case "": Send(stream, 200, "text/html; charset=utf-8", MemberPage(_dashPage, s.Name, MyPort(me))); return false;
+                case "log": Send(stream, 200, "text/html; charset=utf-8", MemberPage(_logPage, s.Name, MyPort(me))); return false;
                 case "events":
                 case "log/stream":
                     if (!AddView(me.Id, c)) { Send(stream, 503, "text/plain", "too many live views"); return false; }
@@ -451,6 +452,7 @@ public sealed class RelayServer : IDisposable
     {
         string epoch;
         long after = -1;
+        int port = 0;
         string? snapshot = null;
         var lines = new List<(long Seq, string Text, bool Marker)>();
         try {
@@ -459,6 +461,7 @@ public sealed class RelayServer : IDisposable
             epoch = root.TryGetProperty("epoch", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString()! : "";
             if (epoch.Length is 0 or > 32) throw new FormatException();
             if (root.TryGetProperty("after", out var af) && af.TryGetInt64(out long a)) after = a;
+            if (root.TryGetProperty("port", out var pt) && pt.TryGetInt32(out int pv) && pv is >= 1 and <= 65535) port = pv;
             if (root.TryGetProperty("snapshot", out var sn) && sn.ValueKind == JsonValueKind.Object) {
                 // only what the dashboard knows, typed: a number stays a number, a text stays text (the pages escape text)
                 try {
@@ -503,7 +506,7 @@ public sealed class RelayServer : IDisposable
                 Send(stream, 409, "application/json", "{\"resync\":true}");
                 return;
             }
-            lock (_lock) { share.Name = m.Name; share.LastPush = DateTime.UtcNow; }
+            lock (_lock) { share.Name = m.Name; share.LastPush = DateTime.UtcNow; share.Port = port; }
             var batch = new List<LogLine>();
             if (share.Epoch != epoch) {
                 // their app restarted (its numbering starts over): a marker, so a fresh view starts at their new run
@@ -594,7 +597,8 @@ public sealed class RelayServer : IDisposable
     private string GroupJson(RelayMember me)
     {
         var sb = new StringBuilder();
-        sb.Append("{\"me\":").Append(JsonSerializer.Serialize(me.Name, FsperfJson.Default.String)).Append(",\"sharing\":[");
+        sb.Append("{\"me\":").Append(JsonSerializer.Serialize(me.Name, FsperfJson.Default.String))
+          .Append(",\"myPort\":").Append(MyPort(me)).Append(",\"sharing\":[");
         var now = DateTime.UtcNow;
         lock (_lock) {
             bool first = true;
@@ -603,18 +607,26 @@ public sealed class RelayServer : IDisposable
                 first = false;
                 sb.Append("{\"id\":\"").Append(s.MemberId).Append("\",\"name\":").Append(JsonSerializer.Serialize(s.Name, FsperfJson.Default.String))
                   .Append(",\"since\":").Append(JsonSerializer.Serialize(s.Since, FsperfJson.Default.DateTime))
-                  .Append(",\"away\":").Append(now - s.LastPush > Away ? "true" : "false").Append('}');
+                  .Append(",\"away\":").Append(now - s.LastPush > Away ? "true" : "false")
+                  .Append(",\"server\":").Append(s.Events.Last.Contains("\"server\":true") ? "true" : "false").Append('}');   // #17
             }
         }
         return sb.Append("]}").ToString();
     }
 
+    // the viewer's own PC's dashboard port, while that PC shares (0 = unknown: no Settings link, e.g. on a phone).
+    // Settings are never changed THROUGH the relay: the link opens the settings page on the viewer's own PC.
+    private int MyPort(RelayMember me) { lock (_lock) return _shares.TryGetValue(me.Id, out var s) ? s.Port : 0; }
+
+    private static string SettingsLink(int port) =>
+        port > 0 ? $"<a href=\"http://127.0.0.1:{port}/settings\" title=\"SVS Performance Monitor's settings on this PC\">Settings</a>" : "";
+
     // the dashboard / log page for one member: the group instead of Settings in the menu, their name as the heading
-    private static byte[] MemberPage(byte[] page, string name)
+    private static byte[] MemberPage(byte[] page, string name, int myPort)
     {
         string html = Encoding.UTF8.GetString(page);
         string safe = WebUtility.HtmlEncode(name);
-        html = html.Replace("<a href=\"/settings\">Settings</a>", "")
+        html = html.Replace("<a href=\"/settings\">Settings</a>", SettingsLink(myPort))
                    .Replace("<nav aria-label=\"Main navigation\">", "<nav aria-label=\"Main navigation\"><a href=\"/\">Group</a>")
                    .Replace("<div class=\"product\">SVS Performance Monitor</div>", $"<div class=\"product\">{safe}</div>")
                    .Replace("<div class=\"studio\">SimVizion Studios</div>", "<div class=\"studio\">SVS Performance Monitor · shared</div>")

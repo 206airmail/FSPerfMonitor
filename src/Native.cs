@@ -28,6 +28,30 @@ internal static unsafe class Native
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool CloseHandle(IntPtr h);
 
+    // another process's command line (#17: a dedicated server is the game with -server): ProcessCommandLineInformation
+    // (60, Windows 8.1+), needs only PROCESS_QUERY_LIMITED_INFORMATION. The answer is a UNICODE_STRING whose text follows
+    // it in the same buffer. null = not readable.
+    [DllImport("ntdll.dll")]
+    private static extern int NtQueryInformationProcess(IntPtr process, int infoClass, void* info, int length, out int returned);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct UNICODE_STRING { public ushort Length, MaximumLength; public IntPtr Buffer; }
+
+    public static string? CommandLine(IntPtr process)
+    {
+        if (process == IntPtr.Zero) return null;
+        NtQueryInformationProcess(process, 60, null, 0, out int len);   // STATUS_INFO_LENGTH_MISMATCH + the size
+        if (len < sizeof(UNICODE_STRING) || len > 1 << 20) return null;
+        var buf = new byte[len];
+        fixed (byte* p = buf) {
+            if (NtQueryInformationProcess(process, 60, p, len, out _) != 0) return null;
+            var us = (UNICODE_STRING*)p;
+            long start = (byte*)us->Buffer - p;
+            if (us->Buffer == IntPtr.Zero || start < 0 || start + us->Length > len) return null;   // must lie inside our buffer
+            return new string((char*)us->Buffer, 0, us->Length / 2);
+        }
+    }
+
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern uint SuspendThread(IntPtr h);
 

@@ -106,7 +106,9 @@ public static class Program
             if (TrayNative.StartDetached(Environment.ProcessPath!, [.. args, TrayChildArg])) return 0;
         }
         args = args.Where(a => a != TrayChildArg).ToArray();
-        if (args.Length == 2 && args[0] == "--burn") return Burn(int.Parse(args[1], CultureInfo.InvariantCulture));
+        // (more arguments are ignored: the self-test adds -server to look like a dedicated server, #17)
+        if (args.Length >= 2 && args[0] == "--burn") return Burn(int.Parse(args[1], CultureInfo.InvariantCulture));
+        if (args.Length == 1 && args[0] == "--is-server-cmdline") { Console.WriteLine(Collector.IsServerCommandLine(Console.In.ReadToEnd().Trim()) ? "server" : "game"); return 0; }   // self-test helper (#17)
         if (args.Length == 4 && args[0] == "--judge") {  // self-test helper: the full-mode verdict for frame / CPU busy / GPU busy ms
             double P(string x) => double.Parse(x, CultureInfo.InvariantCulture);
             var f = new FrameStats("running", "", 100, 1000 / P(args[1]), P(args[1]), P(args[1]), P(args[1]), 0, P(args[2]), 0, P(args[3]), 0, 0, 0, "", "");

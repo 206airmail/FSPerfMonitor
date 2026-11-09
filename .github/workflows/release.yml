@@ -1,6 +1,6 @@
 # Release: push a tag v<version> (= <Version> in src/FSPerf.csproj) -> build on a clean Windows machine, smoke-test,
-# package, and publish a GitHub Release with the zip and its SHA256. Manual runs ("Run workflow") build and upload the
-# zip as a workflow artifact only, without a release - for checking a build before tagging.
+# package, and publish a GitHub Release with the zip and its SHA256. A release tag is the ONLY trigger (Nick 2026-11-09:
+# CI runs for published releases only; no branch pushes, no manual runs).
 # The full self-test (test/selftest.ps1) runs on a desktop PC before tagging: it starts tray apps and a capture session.
 #
 # Security: the build job only reads the repository; only the small publish job (tags only) may write, and it runs no
@@ -11,7 +11,6 @@ name: release
 on:
   push:
     tags: ['v*']
-  workflow_dispatch:
 
 permissions:
   contents: read

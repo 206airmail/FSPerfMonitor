@@ -475,6 +475,12 @@ try {
     $fzNames = @(Get-ChildItem $fzx -Recurse -File | ForEach-Object { $_.FullName.Substring($fzx.Length + 1).Replace('\', '/') } | Sort-Object)
     $fzText = (Get-ChildItem $fzx -Recurse -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
     Check (($fzNames -join ',') -eq 'fs25plugins.log,fsp.log,log.txt,plugins/T3D.log' -and $fzText -match 't3d line' -and $fzText -notmatch [regex]::Escape($env:USERNAME) -and $fzText -notmatch [regex]::Escape($env:COMPUTERNAME)) "full logs: one zip with every log, cleaned ($($fzNames -join ', '))"
+    # too big even packed: refused while packing (Codex #16: never a huge archive in memory first)
+    $bigProf = Join-Path $gdir 'bigprofile'; New-Item -ItemType Directory $bigProf | Out-Null
+    $rnd = New-Object byte[] (20MB); (New-Object Random 7).NextBytes($rnd); [IO.File]::WriteAllBytes((Join-Path $bigProf 'log.txt'), $rnd)
+    $bigOut = Join-Path $gdir 'big.zip'
+    $bigErr = (& { $ErrorActionPreference = 'Continue'; & $exe --full-logs-zip $bigProf $bigOut 2>&1 | ForEach-Object { "$_" } }) -join ' '
+    Check ($LASTEXITCODE -ne 0 -and -not (Test-Path $bigOut)) "full logs: logs too big even packed are refused while packing"
     Check ((GReq POST '/api/full-logs/ask' ('{"id":"' + $gid + '"}') @("Origin: $gbase")).code -eq '401') "full logs: asking needs a sign-in"
     Check ((GReq POST '/api/full-logs/ask' ('{"id":"' + $gid + '"}') @("Origin: $gbase", $gcookie)).code -eq '200') "full logs: a member asks"
     $fs1 = (GReq GET "/s/$gid/api/full-logs" $null @($gcookie)).body | ConvertFrom-Json

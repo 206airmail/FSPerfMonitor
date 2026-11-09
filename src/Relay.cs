@@ -195,6 +195,8 @@ public sealed class RelayServer : IDisposable
     // their other runs (another PC with the same code, a restart) send meanwhile
     private readonly Dictionary<string, List<string>> _stopped = new();
     private readonly SemaphoreSlim _downloads = new(2, 2);
+    private readonly SemaphoreSlim _uploads = new(2, 2);   // #16 full-log uploads at a time
+    private long _uploadReserved;                          // bytes promised to uploads in progress (under _lock)
     private int _active;                                                    // requests being handled right now
     private readonly Timer _sweep;
     private readonly byte[] _groupPage, _joinPage, _dashPage, _logPage;
@@ -459,12 +461,15 @@ public sealed class RelayServer : IDisposable
                     byte[]? zip; DateTime at;
                     lock (_lock) { zip = s.Full; at = s.FullAt; }
                     if (zip == null) { Send(stream, 404, "text/plain", "no full logs"); return false; }
+                    if (!_downloads.Wait(0)) { Send(stream, 503, "text/plain", "busy, try again in a moment"); return false; }
+                    try {
                     string safe = new string(s.Name.Select(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_' ? ch : '_').ToArray()).Trim('_');
                     stream.WriteTimeout = 30000;
                     stream.Write(Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: application/zip\r\nContent-Length: {zip.Length}\r\n" +
                         $"Content-Disposition: attachment; filename=\"{(safe.Length > 0 ? safe : "member")}-full-logs-{at.ToLocalTime():yyyyMMdd-HHmm}.zip\"\r\n" +
                         "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Robots-Tag: noindex, nofollow\r\nConnection: close\r\n\r\n"));
                     stream.Write(zip);
+                    } finally { _downloads.Release(); }
                     return false;
                 }
                 case "api/logs": {   // #15: the logs this member shares, the game's first
@@ -504,7 +509,30 @@ public sealed class RelayServer : IDisposable
         bool sharing = r.Route is "/api/push" or "/api/stop" or "/api/full-logs/send" or "/api/full-logs/decline";
         int limit = r.Route == "/api/push" ? MaxBody : r.Route == "/api/full-logs/send" ? MaxFullLogs : MaxSmallBody;
         if (r.Length < 0 || r.Length > limit) { Refuse(413, "\"too big\""); return; }
-        if (r.Route == "/api/full-logs/send") deadline = DateTime.UtcNow.AddMinutes(3);   // 16 MB on a slow upload
+        // an upload is checked BEFORE its body is read or memory reserved for it: a request of theirs is open, this is its
+        // id, it is a zip, it fits in the group's budget (counting uploads in progress), and only 2 run at once (Codex #16)
+        bool upload = r.Route == "/api/full-logs/send";
+        if (upload) {
+            if (!r.ContentType.StartsWith("application/zip", StringComparison.OrdinalIgnoreCase)) { Refuse(415, "\"zip only\""); return; }
+            if (!_uploads.Wait(0)) { Refuse(503, "\"Busy. Try again in a moment.\""); return; }
+        }
+        bool reserved = false;
+        try {
+        if (upload) {
+            var who = Sender(r);
+            if (who == null) { Refuse(Failed(r.Client) ? 429 : 401, "\"This invite code is not in the group.\""); return; }
+            string why = "";
+            lock (_lock) {
+                if (!_shares.TryGetValue(who.Id, out var us) || us.ReqId.Length == 0 || r.RequestId.Length == 0
+                    || !CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(us.ReqId), Encoding.ASCII.GetBytes(r.RequestId)))
+                    why = "\"Nobody asked for them (or the request expired).\"";
+                else if (_shares.Values.Where(x => x.Full != null).Sum(x => (long)x.Full!.Length) + _uploadReserved + r.Length > MaxFullLogsTotal)
+                    why = "\"The group has no room for more full logs right now. Try again later.\"";
+                else { _uploadReserved += r.Length; reserved = true; }
+            }
+            if (why.Length > 0) { Refuse(why.Contains("room") ? 507 : 409, why); return; }
+            deadline = DateTime.UtcNow.AddMinutes(3);   // 16 MB on a slow upload
+        }
         // a sender proves the invite code before anything is read or kept for it
         RelayMember? sender = null;
         if (sharing) {
@@ -522,7 +550,7 @@ public sealed class RelayServer : IDisposable
             if (n <= 0) return;
             got += n;
         }
-        if (r.Route == "/api/full-logs/send") { ReceiveFullLogs(stream, sender!, r, body); return; }
+        if (upload) { ReceiveFullLogs(stream, sender!, r, body); return; }
         if (!r.ContentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase)) { Send(stream, 415, "application/json", "\"JSON only\""); return; }
         switch (r.Route) {
             case "/api/full-logs/ask": AskFullLogs(stream, r, body); return;
@@ -554,6 +582,10 @@ public sealed class RelayServer : IDisposable
             }
         }
         Send(stream, 404, "application/json", "\"not found\"");
+        } finally {
+            if (reserved) lock (_lock) _uploadReserved -= r.Length;
+            if (upload) _uploads.Release();
+        }
     }
 
     // ---- sharing: POST /api/push --------------------------------------------------------------------------------------
@@ -708,7 +740,8 @@ public sealed class RelayServer : IDisposable
                 answer = "\"Nobody asked for them (or the request expired).\"";
             else {
                 long others = _shares.Values.Where(x => x != s && x.Full != null).Sum(x => (long)x.Full!.Length);
-                if (others + body.Length > MaxFullLogsTotal) answer = "\"The group has no room for more full logs right now. Try again later.\"";
+                // (_uploadReserved includes this upload)
+                if (others + _uploadReserved > MaxFullLogsTotal) answer = "\"The group has no room for more full logs right now. Try again later.\"";
                 else { s.Full = body; s.FullAt = DateTime.UtcNow; s.FullBy = s.ReqBy; s.ReqId = ""; s.Declined = false; }
             }
         }

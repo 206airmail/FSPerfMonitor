@@ -30,7 +30,7 @@ public sealed class MonitorHost : IDisposable
     public string ShareState => _share?.State ?? (_shareProblem.Length > 0 ? "bad-address" : "off");
     public string ShareName => _share?.MemberName ?? "";
     public ShareClient.LogRequest? LogRequest => _share?.Request;   // #16
-    public string? SendFullLogs(string requestId) => _share?.SendFullLogs(requestId) ?? "this PC isn't sharing with a group.";
+    public string? SendFullLogs(string requestId) => _share is null ? "this PC isn't sharing with a group." : _share.SendFullLogs(requestId);   // null = sent
     public void DeclineFullLogs() => _share?.DeclineFullLogs();
     private readonly string _shareProblem = "";
 

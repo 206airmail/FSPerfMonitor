@@ -170,8 +170,8 @@ public sealed class ShareClient : IDisposable
     {
         byte[] zip;
         try { zip = BuildFullLogsZip(_logs().Select(l => l.Src)); }
+        catch (TooBigException) { return $"the logs are too big to send, even packed (at most {RelayServer.MaxFullLogs / 1048576} MB)."; }
         catch (Exception e) { return "the logs couldn't be packed: " + e.Message; }
-        if (zip.Length > RelayServer.MaxFullLogs) return $"the logs are too big to send, even packed ({zip.Length / 1048576} MB; at most {RelayServer.MaxFullLogs / 1048576} MB).";
         try {
             using var http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false, ConnectTimeout = TimeSpan.FromSeconds(10) }) { Timeout = TimeSpan.FromMinutes(3) };
             using var req = new HttpRequestMessage(HttpMethod.Post, new Uri(_push, "/api/full-logs/send")) { Content = new ByteArrayContent(zip) };
@@ -198,9 +198,23 @@ public sealed class ShareClient : IDisposable
 
     public const long FullLogsFileBytes = 64L * 1024 * 1024;
 
+    // the zip may never grow past what the group takes: writing stops right there (no 1 GB archive in memory first)
+    private sealed class CappedStream : MemoryStream
+    {
+        private readonly long _cap;
+        public CappedStream(long cap) { _cap = cap; }
+        public override void Write(byte[] buffer, int offset, int count) { Check(count); base.Write(buffer, offset, count); }
+        public override void Write(ReadOnlySpan<byte> buffer) { Check(buffer.Length); base.Write(buffer); }
+        public override void WriteByte(byte value) { Check(1); base.WriteByte(value); }
+        private void Check(int n) { if (Position + n > _cap) throw new TooBigException(); }
+    }
+    public sealed class TooBigException : IOException { public TooBigException() : base("too big") { } }
+
+    // each file up to the length it had when packing began (a log still growing can't keep the zip growing), the newest
+    // 64 MB at most, in lines of at most 4,000 characters (a file without line breaks never becomes one huge string)
     public static byte[] BuildFullLogsZip(IEnumerable<LogSource> sources)
     {
-        using var ms = new MemoryStream();
+        using var ms = new CappedStream(RelayServer.MaxFullLogs);
         using (var zip = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true)) {
             foreach (var src in sources) {
                 if (src.Path.Length == 0 || !File.Exists(src.Path)) continue;
@@ -209,16 +223,55 @@ public sealed class ShareClient : IDisposable
                     _ => "plugins/" + src.Id[7..] + ".log",   // a plain name (LogSources.ValidPluginName)
                 };
                 using var fs = new FileStream(src.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                bool cut = fs.Length > FullLogsFileBytes;
-                if (cut) fs.Seek(fs.Length - FullLogsFileBytes, SeekOrigin.Begin);
-                using var reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                long end = fs.Length, start = Math.Max(0, end - FullLogsFileBytes);
+                fs.Seek(start, SeekOrigin.Begin);
+                using var reader = new StreamReader(new Bounded(fs, end - start), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
                 using var w = new StreamWriter(zip.CreateEntry(entry, System.IO.Compression.CompressionLevel.Optimal).Open(), new UTF8Encoding(false));
-                if (cut) { reader.ReadLine(); w.WriteLine($"=== the first {(fs.Length - FullLogsFileBytes) / 1048576} MB of this file were left out (it is very long) ==="); }
-                string? line;
-                while ((line = reader.ReadLine()) != null) w.WriteLine(Redactor.Apply(line));
+                if (start > 0) w.WriteLine($"=== the first {start / 1048576} MB of this file were left out (it is very long) ===");
+                var line = new StringBuilder();
+                var buf = new char[8192];
+                bool skipFirst = start > 0;   // the cut lands inside a line: drop that partial line
+                int n;
+                while ((n = reader.Read(buf, 0, buf.Length)) > 0) {
+                    for (int i = 0; i < n; i++) {
+                        char ch = buf[i];
+                        if (ch == '\n' || line.Length >= LogTail.MaxLineChars) {
+                            if (!skipFirst) w.WriteLine(Redactor.Apply(line.ToString().TrimEnd('\r')));
+                            skipFirst = false;
+                            line.Clear();
+                            if (ch == '\n') continue;
+                        }
+                        line.Append(ch);
+                    }
+                }
+                if (line.Length > 0 && !skipFirst) w.WriteLine(Redactor.Apply(line.ToString().TrimEnd('\r')));
             }
         }
-        return ms.ToArray();
+        return ms.ToArray();   // 16 MB at most (CappedStream)
+    }
+
+    // a read-only view of the next `length` bytes of a stream
+    private sealed class Bounded : Stream
+    {
+        private readonly Stream _s;
+        private long _left;
+        public Bounded(Stream s, long length) { _s = s; _left = length; }
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (_left <= 0) return 0;
+            int n = _s.Read(buffer, offset, (int)Math.Min(count, _left));
+            _left -= n;
+            return n;
+        }
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     // stops sharing: the send in progress is cancelled and finished FIRST, then the relay is told (so no late send can

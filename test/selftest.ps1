@@ -348,6 +348,8 @@ try {
     $listen = @(Get-NetTCPConnection -State Listen -LocalPort 8796 -ErrorAction SilentlyContinue | ForEach-Object LocalAddress)
     Check ($listen.Count -gt 0 -and -not ($listen | Where-Object { $_ -ne '127.0.0.1' })) "group: the relay listens on 127.0.0.1 only ($($listen -join ', '))"
     Check ((GReq GET '/api/group').code -eq '401') "group: the list needs a sign-in"
+    $rb = GReq GET '/robots.txt'
+    Check ($rb.code -eq '200' -and $rb.body -match 'Disallow: /' -and $rb.headers -match 'X-Robots-Tag: noindex') "group: crawlers are asked to stay out (robots.txt, X-Robots-Tag)"
     Check ((GReq POST '/api/signin' ('{"code":"' + $gcode + '"}')).code -eq '403') "group: sign-in without this site's Origin -> 403"
     Check ((GReq POST '/api/signin' '{"code":"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF"}' @("Origin: $gbase")).code -eq '401') "group: a wrong code -> 401"
     $si = GReq POST '/api/signin' ('{"code":"' + $gcode.ToLower().Replace('-', ' ') + '"}') @("Origin: $gbase")

@@ -350,6 +350,8 @@ public sealed class RelayServer : IDisposable
     {
         if (WebServer.Assets.TryGetValue(r.Route, out var asset)) { Send(stream, 200, asset.Type, asset.Body, cache: true); return false; }
         if (r.Route == "/") { Send(stream, 200, "text/html; charset=utf-8", _groupPage); return false; }
+        // a new HTTPS name is found by crawlers within minutes (certificate logs): ask them to stay out
+        if (r.Route == "/robots.txt") { Send(stream, 200, "text/plain", "User-agent: *\nDisallow: /\n", cache: true); return false; }
         var me = Viewer(r);
         if (r.Route == "/api/group") {
             if (me == null) { Send(stream, 401, "application/json", "\"Sign in with your invite code.\""); return false; }
@@ -638,7 +640,7 @@ public sealed class RelayServer : IDisposable
         var sb = new StringBuilder();
         sb.Append($"HTTP/1.1 {code} {reason}\r\nContent-Type: {type}\r\nContent-Length: {body.Length}\r\n");
         sb.Append($"Cache-Control: {(cache ? "max-age=300" : "no-store")}\r\nX-Content-Type-Options: nosniff\r\n");
-        sb.Append("Referrer-Policy: no-referrer\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: frame-ancestors 'none'\r\n");
+        sb.Append("Referrer-Policy: no-referrer\r\nX-Frame-Options: DENY\r\nContent-Security-Policy: frame-ancestors 'none'\r\nX-Robots-Tag: noindex, nofollow\r\n");
         if (setCookie != null) sb.Append("Set-Cookie: ").Append(setCookie).Append("\r\n");
         sb.Append("Connection: close\r\n\r\n");
         s.Write(Encoding.ASCII.GetBytes(sb.ToString()));

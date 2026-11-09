@@ -332,7 +332,9 @@ public sealed class WebServer : IDisposable
                 var (m, code, problem) = members.Add(add.GetString() ?? "");
                 if (m == null) { Send(stream, 422, "application/json", err(problem ?? "not added")); return; }
                 string S(string v) => System.Text.Json.JsonSerializer.Serialize(v, FsperfJson.Default.String);
-                Send(stream, 200, "application/json", Encoding.UTF8.GetBytes($"{{\"id\":{S(m.Id)},\"name\":{S(m.Name)},\"code\":{S(code)}}}"));
+                // #18: the invite link to send them (when the group's public address is set)
+                string link = Settings?.Current.GroupInviteAddress is { Length: > 0 } pub ? Invites.Link(pub, code) : "";
+                Send(stream, 200, "application/json", Encoding.UTF8.GetBytes($"{{\"id\":{S(m.Id)},\"name\":{S(m.Name)},\"code\":{S(code)},\"link\":{S(link)}}}"));
                 return;
             }
             if (root.TryGetProperty("remove", out var rm) && rm.ValueKind == System.Text.Json.JsonValueKind.String) {
@@ -353,6 +355,7 @@ public sealed class WebServer : IDisposable
         foreach (var (route, res, type) in new[] {
             ("/assets/styles.css", "styles.css", "text/css; charset=utf-8"),
             ("/assets/tokens.css", "tokens.css", "text/css; charset=utf-8"),
+            ("/assets/qrcode.js", "qrcode.js", "text/javascript; charset=utf-8"),   // qrcode-generator (MIT), the phone QR code (#18)
             ("/assets/logo-64.png", "logo-64.png", "image/png"),
             ("/assets/logo-256.png", "logo-256.png", "image/png"),
             ("/favicon.png", "favicon-32.png", "image/png"),

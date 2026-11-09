@@ -37,6 +37,7 @@ public sealed class Options
     public string? ShareUrl;                     // #14: share with the group relay at this address
     public string? ShareCode;                    //      using this invite code
     public string ServerMode = "auto";           // #17: auto (from the game's command line) | on | off
+    public string? Join;                         // #18: an invite link to join (svsperf: link type / "Share this PC")
 
     // the command line, on top of `start` (the tray app's settings) or the defaults
     public static Options Parse(string[] a, Options? start = null)
@@ -68,6 +69,7 @@ public sealed class Options
                 case "--group-members": o.GroupMembers = Next(); break;
                 case "--share": o.ShareUrl = Next(); break;
                 case "--share-code": o.ShareCode = Next(); break;
+                case "--join": o.Join = Next(); break;
                 case "--server-mode": {
                     string m = Next();
                     o.ServerMode = m is "on" or "off" or "auto" ? m : throw new ArgumentException("--server-mode takes auto, on or off");
@@ -139,6 +141,10 @@ public static class Program
             return 0;
         }
         if (args.Length >= 1 && args[0] is "--group-add" or "--group-list" or "--group-remove") return GroupCommand(args);
+        if (args.Length == 1 && args[0] == "--parse-invite") {   // self-test helper (#18): stdin -> "<group>|<code>" or "no: why"
+            Console.WriteLine(Invites.TryParse(Console.In.ReadToEnd(), out var g, out string ic, out string? why) ? $"{g!.AbsoluteUri}|{ic}" : "no: " + why);
+            return 0;
+        }
         if (args.Length == 1 && args[0] == "--redact") { Console.Write(Redactor.Apply(Console.In.ReadToEnd())); return 0; }   // self-test helper (#14): stdin -> stdout
         if (args.Length == 1 && args[0] == "--frametimes-access") { Console.WriteLine(AutoStart.FrameTimesAccess()); return 0; }   // self-test helper
         Options o;

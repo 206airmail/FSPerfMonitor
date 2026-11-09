@@ -21,6 +21,10 @@ public sealed class AppSettings
     public string InviteCode { get; set; } = "";            //      this PC's invite code (a secret: never shown to other devices)
     public bool HostGroup { get; set; }                     // #14: run the group relay on this PC (behind an HTTPS web server)
     public int GroupPort { get; set; } = 8766;              //      on 127.0.0.1:<GroupPort>
+    public string GroupInviteAddress { get; set; } = "";    // #18: the group's public address (invite links: https://<it>/join#<code>)
+    public bool HostSharesSelf { get; set; }                // #18: the host PC shares with its own group (no code to handle)
+    public string HostSelfName { get; set; } = "Host";      //      its name in the group
+    public string HostSelfId { get; set; } = "";            //      its member id (managed by the app)
 
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 
@@ -31,6 +35,9 @@ public sealed class AppSettings
         UserCopy ??= "";
         GroupAddress ??= "";
         InviteCode ??= "";
+        GroupInviteAddress ??= "";
+        HostSelfName ??= "Host";
+        HostSelfId ??= "";
         return this;
     }
 }
@@ -84,6 +91,9 @@ public static class SettingsStore
         if (s.Port < 1 || s.Port > 65535) return "Enter a whole number from 1 to 65535.";
         if (s.HostGroup && (s.GroupPort < 1 || s.GroupPort > 65535 || s.GroupPort == s.Port))
             return "The group’s port must be a whole number from 1 to 65535, different from the dashboard’s port.";
+        if (s.HostGroup && s.GroupInviteAddress.Trim().Length > 0 && ShareClient.ParseAddress(s.GroupInviteAddress, out string? whyInvite) == null)
+            return "The group’s public address: " + whyInvite;
+        if (s.HostGroup && s.HostSharesSelf && s.HostSelfName.Trim().Length == 0) return "Enter a name for this PC in the group.";
         if (s.ShareWithGroup) {
             if (ShareClient.ParseAddress(s.GroupAddress, out string? why) == null) return why;
             if (RelayMembers.Normalize(s.InviteCode).Length != 24) return "Enter the invite code you got from the group’s host.";

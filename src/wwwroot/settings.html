@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark light">
-<title>SVS Performance Monitor · Settings</title><link rel="icon" href="/favicon.png" type="image/png"><link rel="stylesheet" href="/assets/styles.css">
+<title>SVS Performance Monitor · Settings</title><script src="/assets/qrcode.js"></script><link rel="icon" href="/favicon.png" type="image/png"><link rel="stylesheet" href="/assets/styles.css">
 <!-- Settings (0.4, #6). Design: design/settings.html (Codex, SimVizion UI skill). Data: GET/POST /api/settings; saving is
      accepted from this PC only (the server checks), a phone sees the values read-only. Options of later steps (#7 start
      with Windows, frame-times setup, full permissions; #9 home network) are shown but not changeable yet. -->
@@ -22,14 +22,28 @@
 <div class="setting"><div><div class="setting-title">Let my phone or other computers at home open the dashboard</div><p>They can also see your game log, which shows your Windows user name and mod list. Use a trusted private home network. Windows will ask once.</p></div><label class="check-target" title="Let my phone or other computers at home open the dashboard"><input id="lan" type="checkbox" aria-label="Let my phone or other computers at home open the dashboard"></label></div>
 <p class="meta" id="network-address">Home network sharing is off.</p>
 </section>
-<section class="card" id="group-share"><h2>Share with a group</h2>
-<div class="setting"><div><div class="setting-title">Share my game log and performance with my group</div><p>Everyone in your group can watch your dashboard and game log while this is on. Your Windows user name and computer name are removed first. Stop any time here or from the tray icon.</p></div><label class="check-target" title="Share my game log and performance with my group"><input id="share" type="checkbox" aria-label="Share my game log and performance with my group"></label></div>
+<section class="card" id="group-share"><h2>Your group</h2>
+<div id="join-area" class="stack">
+<p class="small">Got an invite link from your group’s host? Open it in your browser and click “Share this PC”, or paste it here.</p>
+<div class="field"><label for="invite-link">Invite link</label><div class="row"><input id="invite-link" type="text" spellcheck="false" autocomplete="off" placeholder="https://perf.example.com/join#…" aria-describedby="invite-link-error"><button type="button" class="primary" id="join">Join</button></div><span id="invite-link-error" class="field-error" role="alert" hidden></span></div>
+</div>
+<div id="member-area" class="stack" hidden>
+<div><div class="setting-title" id="group-line"></div><p class="meta" id="share-status" role="status">Sharing is off.</p></div>
+<p class="small">Everyone in your group can watch your dashboard and game logs while sharing is on. Your Windows user name, computer name and personal folders are removed first.</p>
+<div class="row"><button type="button" id="share-toggle">Stop sharing</button><button type="button" id="leave">Leave the group</button></div>
+<details id="phone"><summary>Sign in on my phone</summary><p class="small" style="margin-top:8px">Scan this with your phone’s camera to watch the group on your phone. It contains your invite code: keep it to yourself.</p><div id="qr" style="margin-top:8px;max-width:220px"></div></details>
+</div>
+<details class="small" id="manual"><summary>Enter the group’s address and code by hand</summary><div class="stack" style="margin-top:8px">
+<div class="setting"><div><div class="setting-title">Share my game log and performance with my group</div><p>Stop any time here or from the tray icon.</p></div><label class="check-target" title="Share my game log and performance with my group"><input id="share" type="checkbox" aria-label="Share my game log and performance with my group"></label></div>
 <div class="field"><label for="group-address">Group address</label><input id="group-address" type="text" spellcheck="false" placeholder="perf.example.com:9443" aria-describedby="group-address-help group-address-error"><span id="group-address-help" class="meta">From your group’s host.</span><span id="group-address-error" class="field-error" hidden></span></div>
 <div class="field"><label for="invite-code">Invite code</label><input id="invite-code" type="password" spellcheck="false" autocomplete="off" aria-describedby="invite-code-help invite-code-error"><span id="invite-code-help" class="meta">Your own code from the group’s host. Keep it to yourself: it also signs you in to watch the group.</span><span id="invite-code-error" class="field-error" hidden></span></div>
-<p class="meta" id="share-status" role="status">Sharing is off.</p>
+</div></details>
 </section>
 <section class="card" id="group-host"><h2>Host a group</h2>
 <div class="setting"><div><div class="setting-title">Host a group on this PC</div><p>Only for the person who runs the group. Needs a web server with HTTPS in front of it, such as Caddy (see the README). Only people you add here can share or watch.</p></div><label class="check-target" title="Host a group on this PC"><input id="host" type="checkbox" aria-label="Host a group on this PC"></label></div>
+<div class="field"><label for="group-invite-address">The group’s public address</label><input id="group-invite-address" type="text" spellcheck="false" placeholder="perf.example.com" aria-describedby="group-invite-address-help group-invite-address-error"><span id="group-invite-address-help" class="meta">What your web server publishes, for example perf.example.com or perf.example.com:9443. Invite links use it.</span><span id="group-invite-address-error" class="field-error" hidden></span></div>
+<div class="setting"><div><div class="setting-title">Also share this PC with the group</div><p>This PC joins its own group, with no code to handle.</p></div><label class="check-target" title="Also share this PC with the group"><input id="host-self" type="checkbox" aria-label="Also share this PC with the group"></label></div>
+<div class="field"><label for="host-self-name">This PC’s name in the group</label><input id="host-self-name" type="text" maxlength="40" spellcheck="false" aria-describedby="host-self-name-error"><span id="host-self-name-error" class="field-error" hidden></span></div>
 <div class="field"><label for="group-port">Group port</label><input id="group-port" type="number" min="1" max="65535" aria-describedby="group-port-help group-port-error"><span id="group-port-help" class="meta">The group listens on this PC only (127.0.0.1). Point your web server here.</span><span id="group-port-error" class="field-error" hidden></span></div>
 <p class="meta" id="host-status" role="status">Not hosting a group.</p>
 <div id="members-area" class="stack" hidden>
@@ -96,11 +110,15 @@ function show(v) {
   $("invite-code").value = s.inviteCode;
   $("host").checked = s.hostGroup;
   $("group-port").value = s.groupPort;
+  $("group-invite-address").value = s.groupInviteAddress || "";
+  $("host-self").checked = s.hostSharesSelf;
+  $("host-self-name").value = s.hostSelfName || "Host";
+  memberView(v);
   groupStatus(v);
   $("version").textContent = v.version;
   const ro = !v.canEdit;
   $("settings-origin").textContent = ro ? "Read-only" : "This PC";
-  for (const id of ["startup", "elevated", "lan", "open-browser", "sampling-enabled", "profile", "port", "share", "group-address", "invite-code", "host", "group-port"]) {
+  for (const id of ["startup", "elevated", "lan", "open-browser", "sampling-enabled", "profile", "port", "share", "group-address", "invite-code", "host", "group-port", "group-invite-address", "host-self", "host-self-name", "invite-link"]) {
     const el = $(id);
     if (el.type === "checkbox") el.disabled = ro; else el.readOnly = ro;
   }
@@ -178,10 +196,17 @@ async function member(body, confirmText) {
     if (res.code) {
       const n = $("new-code"); n.textContent = "";
       const d = document.createElement("div"), st = document.createElement("strong"), p = document.createElement("p"), c = document.createElement("code");
-      st.textContent = "Invite code for " + res.name;
-      p.className = "small"; p.textContent = "Send it to them privately. It is shown only once; if it gets lost, remove them and add them again. ";
-      c.textContent = res.code;
-      d.append(st, p, c); n.append(d); n.hidden = false;
+      st.textContent = (res.link ? "Invite link for " : "Invite code for ") + res.name;
+      p.className = "small";
+      p.textContent = res.link
+        ? "Send it to them privately. Opening it signs them in and offers to share their PC. It is shown only once; if it gets lost, remove them and add them again."
+        : "Send it to them privately with the group’s address. Fill in the group’s public address above to get one-click invite links. It is shown only once.";
+      c.textContent = res.link || res.code; c.style.wordBreak = "break-all";
+      d.append(st, p, c);
+      const copy = document.createElement("button"); copy.type = "button"; copy.textContent = "Copy"; copy.style.marginTop = "8px";
+      copy.onclick = async () => { try { await navigator.clipboard.writeText(res.link || res.code); copy.textContent = "Copied"; } catch { copy.textContent = "Select it and copy"; } };
+      d.append(document.createElement("br"), copy);
+      n.append(d); n.hidden = false;
       $("member-name").value = "";
     }
     const v = await (await fetch("/api/settings", { cache: "no-store" })).json();
@@ -197,6 +222,63 @@ setInterval(async () => {
     if (view) { Object.assign(view, { sharing: v.sharing, sharingAs: v.sharingAs, groupRunning: v.groupRunning, groupProblem: v.groupProblem, members: v.members }); groupStatus(view); }
   } catch { }
 }, 5000);
+
+// #18: "Your group": joined (status, stop/start, leave, phone QR) or not yet (paste an invite link)
+function groupBase(s) {
+  // the address a browser uses: the group's own address, or (this PC hosts and shares on 127.0.0.1) its public one
+  const a = s.groupAddress || "";
+  const local = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/i.test(a);
+  const pub = local ? (s.groupInviteAddress || "") : a;
+  if (!pub) return "";
+  try { const u = new URL(pub.includes("://") ? pub : "https://" + pub); return u.origin; } catch { return ""; }
+}
+function memberView(v) {
+  const s = v.settings, joined = !!(s.groupAddress && (s.inviteCode || !v.canEdit));
+  $("join-area").hidden = joined || !v.canEdit;
+  $("member-area").hidden = !joined;
+  let where = s.groupAddress;
+  try { where = new URL(s.groupAddress.includes("://") ? s.groupAddress : "https://" + s.groupAddress).host; } catch { }
+  const base = groupBase(s);
+  $("group-line").textContent = "Your group: " + (base ? new URL(base).host : where);
+  $("share-toggle").textContent = s.shareWithGroup ? "Stop sharing" : "Start sharing";
+  $("share-toggle").hidden = $("leave").hidden = !v.canEdit;
+  // the phone QR code: the member's own invite link (this PC only, never shown to another device)
+  const qr = $("qr"); qr.textContent = "";
+  const link = base && s.inviteCode ? base + "/join#" + s.inviteCode : "";
+  $("phone").hidden = !link || !v.canEdit || typeof qrcode !== "function";
+  if (!$("phone").hidden) qr.append(qrSvg(link));
+}
+function qrSvg(text) {
+  const q = qrcode(0, "M"); q.addData(text); q.make();
+  const n = q.getModuleCount(), m = 4, ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", `0 0 ${n + 2 * m} ${n + 2 * m}`); svg.setAttribute("role", "img"); svg.setAttribute("aria-label", "QR code: your invite link");
+  svg.style.background = "#fff"; svg.style.width = "100%"; svg.style.height = "auto";
+  let d = "";
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += `M${c + m} ${r + m}h1v1h-1z`;
+  const path = document.createElementNS(ns, "path"); path.setAttribute("d", d); path.setAttribute("fill", "#000");
+  svg.append(path);
+  return svg;
+}
+// an invite link pasted here: https://<group>/join#<code> (the app checks it again when saving)
+$("join").onclick = () => {
+  const err = $("invite-link-error"); err.hidden = true;
+  let u;
+  try { u = new URL($("invite-link").value.trim()); } catch { u = null; }
+  const code = u ? decodeURIComponent(u.hash.slice(1)) : "";
+  if (!u || !/\/join\/?$/i.test(u.pathname) || !code || (u.protocol !== "https:" && u.protocol !== "http:")) {
+    err.textContent = "⚠ Paste the whole invite link, like https://perf.example.com/join#…"; err.hidden = false; return;
+  }
+  $("group-address").value = u.origin; $("invite-code").value = code; $("share").checked = true;
+  $("invite-link").value = "";
+  $("settings-form").requestSubmit();
+};
+$("share-toggle").onclick = () => { $("share").checked = !view.settings.shareWithGroup; $("settings-form").requestSubmit(); };
+$("leave").onclick = () => {
+  if (!confirm("Leave the group? This PC stops sharing and forgets the invite. You'll need a new invite link to join again.")) return;
+  $("share").checked = false; $("group-address").value = ""; $("invite-code").value = "";
+  $("settings-form").requestSubmit();
+};
 
 function fieldError(id, msg) {
   const e = $(id + "-error");
@@ -237,6 +319,7 @@ $("settings-form").onsubmit = async e => {
   const port = $("port").valueAsNumber, okPort = Number.isInteger(port) && port >= 1 && port <= 65535;
   fieldError("port", okPort ? "" : "Enter a whole number from 1 to 65535.");
   fieldError("profile", ""); fieldError("group-address", ""); fieldError("invite-code", ""); fieldError("group-port", "");
+  fieldError("group-invite-address", ""); fieldError("host-self-name", "");
   if (!okPort) { $("port").focus(); return; }
   const profile = $("profile").value.trim();
   const s = Object.assign({}, view.settings, {
@@ -252,6 +335,9 @@ $("settings-form").onsubmit = async e => {
     inviteCode: $("invite-code").value.trim(),
     hostGroup: $("host").checked,
     groupPort: $("group-port").valueAsNumber,
+    groupInviteAddress: $("group-invite-address").value.trim(),
+    hostSharesSelf: $("host-self").checked,
+    hostSelfName: $("host-self-name").value.trim(),
   });
   $("save").disabled = true;
   try {
@@ -271,6 +357,8 @@ $("settings-form").onsubmit = async e => {
       else if (r.status === 422 && /group’s address|https/i.test(body)) fieldError("group-address", body);
       else if (r.status === 422 && /invite code/i.test(body)) fieldError("invite-code", body);
       else if (r.status === 422 && /group’s port/i.test(body)) fieldError("group-port", body);
+      else if (r.status === 422 && /public address/i.test(body)) fieldError("group-invite-address", body);
+      else if (r.status === 422 && /name for this PC/i.test(body)) fieldError("host-self-name", body);
       else if (r.status === 422) fieldError("port", body);
       else notice("Settings were not saved", body);
       return;

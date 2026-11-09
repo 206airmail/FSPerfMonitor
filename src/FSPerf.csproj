@@ -29,6 +29,8 @@
     <EmbeddedResource Include="wwwroot\settings.html" LogicalName="settings.html" />
     <EmbeddedResource Include="wwwroot\welcome.html" LogicalName="welcome.html" />
     <EmbeddedResource Include="wwwroot\group.html" LogicalName="group.html" />
+    <EmbeddedResource Include="wwwroot\join.html" LogicalName="join.html" />
+    <EmbeddedResource Include="wwwroot\assets\qrcode.js" LogicalName="qrcode.js" />
     <EmbeddedResource Include="wwwroot\assets\styles.css" LogicalName="styles.css" />
     <EmbeddedResource Include="wwwroot\assets\tokens.css" LogicalName="tokens.css" />
     <EmbeddedResource Include="wwwroot\brand\logo-64.png" LogicalName="logo-64.png" />

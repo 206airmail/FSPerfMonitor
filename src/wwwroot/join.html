@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark light">
+<meta name="referrer" content="no-referrer">
+<title>SVS Performance Monitor · Join the group</title><link rel="icon" href="/favicon.png" type="image/png"><link rel="stylesheet" href="/assets/styles.css">
+<!-- The invite link's page (0.6, #18): https://<group>/join#<code>. The code is in the fragment, which no browser sends
+     to a server; this page reads it, signs this browser in (POST /api/signin, same site), takes it out of the address
+     bar, and offers "Share this PC": the svsperf: link opens SVS Performance Monitor, which asks before it shares. -->
+</head>
+<body data-page="join"><a class="skip" href="#main">Skip to content</a>
+<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios · Group</div></div></a><nav aria-label="Main navigation"><a href="/">Group</a></nav></div></header>
+<main id="main" class="wrap form-page welcome">
+<section class="card stack"><div class="eyebrow">Invitation</div><h1 id="title">Joining the group…</h1>
+<p id="intro" class="welcome-intro">One moment.</p>
+<div id="ready" hidden>
+<div class="feature"><h2>Watch the group</h2><p>This browser is signed in for 30 days. You can see everyone who is sharing, their live dashboard and game logs.</p>
+<div class="row"><a class="button primary" href="/">Open the group</a></div></div>
+<div class="feature"><h2>Share this PC</h2><p>Let the group watch this PC’s game log and performance too. SVS Performance Monitor asks you before it shares anything; your Windows user name, computer name and personal folders are removed first.</p>
+<div class="row"><a class="button primary" id="share">Share this PC with the group</a></div>
+<p class="small" style="margin-top:8px">Don’t have SVS Performance Monitor yet? <a href="https://github.com/206airmail/FSPerfMonitor/releases/latest" rel="noopener">Download it</a>, start it once, then come back to this page and click the button again. On a phone, just watch: sharing is for the PC that plays.</p></div>
+</div>
+</section></main>
+<footer class="wrap footer"><span>SimVizion Studios · SVS Performance Monitor</span><span>Only people in this group can see what is shared here.</span></footer>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+// the code: from the fragment (kept in this page only, never in the address bar once read)
+const code = decodeURIComponent((location.hash || "").slice(1)).trim();
+history.replaceState(null, "", "/join");
+function fail(title, text) { $("title").textContent = title; $("intro").textContent = text; }
+(async () => {
+  if (!code) { fail("This invite link is incomplete", "Ask your group’s host to send it again."); return; }
+  try {
+    const r = await fetch("/api/signin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+    const body = await r.json();
+    if (!r.ok) { fail("This invite doesn’t work", (typeof body === "string" ? body : "") + " Ask your group’s host for a new one."); return; }
+    $("title").textContent = "Welcome, " + body.me;
+    $("intro").textContent = "You’re in " + location.host + ".";
+    $("share").href = "svsperf://join/?a=" + encodeURIComponent(location.origin) + "&c=" + encodeURIComponent(code);
+    $("ready").hidden = false;
+  } catch { fail("The group is not answering", "Check your connection, then open the invite link again."); }
+})();
+</script>
+</body></html>

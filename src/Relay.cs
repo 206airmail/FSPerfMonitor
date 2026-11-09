@@ -190,7 +190,7 @@ public sealed class RelayServer : IDisposable
     private readonly SemaphoreSlim _downloads = new(2, 2);
     private int _active;                                                    // requests being handled right now
     private readonly Timer _sweep;
-    private readonly byte[] _groupPage, _dashPage, _logPage;
+    private readonly byte[] _groupPage, _joinPage, _dashPage, _logPage;
     private volatile bool _stop;
 
     public int Port { get; }
@@ -253,6 +253,7 @@ public sealed class RelayServer : IDisposable
         _members.Removed += OnMemberRemoved;
         _listener = new TcpListener(IPAddress.Loopback, port);
         _groupPage = Resource("group.html");
+        _joinPage = Resource("join.html");
         _dashPage = Resource("index.html");
         _logPage = Resource("log.html");
         _sweep = new Timer(_ => Sweep(), null, 15000, 15000);
@@ -391,6 +392,14 @@ public sealed class RelayServer : IDisposable
     {
         if (WebServer.Assets.TryGetValue(r.Route, out var asset)) { Send(stream, 200, asset.Type, asset.Body, cache: true); return false; }
         if (r.Route == "/") { Send(stream, 200, "text/html; charset=utf-8", _groupPage); return false; }
+        // #18: the invite link's page (the code stays in its fragment), and the app's "who does this code belong to?"
+        if (r.Route == "/join") { Send(stream, 200, "text/html; charset=utf-8", _joinPage); return false; }
+        if (r.Route == "/api/whoami") {
+            var who = Sender(r);
+            if (who == null) { Send(stream, Failed(r.Client) ? 429 : 401, "application/json", "\"This invite code is not in the group.\""); return false; }
+            Send(stream, 200, "application/json", $"{{\"name\":{JsonSerializer.Serialize(who.Name, FsperfJson.Default.String)}}}");
+            return false;
+        }
         // a new HTTPS name is found by crawlers within minutes (certificate logs): ask them to stay out
         if (r.Route == "/robots.txt") { Send(stream, 200, "text/plain", "User-agent: *\nDisallow: /\n", cache: true); return false; }
         var me = Viewer(r);

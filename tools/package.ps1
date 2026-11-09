@@ -21,6 +21,7 @@ foreach ($f in $need + $pm.Name) { Copy-Item (Join-Path $pub $f) $stage }
 Copy-Item (Join-Path $root 'package\README.txt') $stage
 Copy-Item (Join-Path $root 'LICENSE') (Join-Path $stage 'LICENSE.txt')
 Copy-Item (Join-Path $root 'third_party\PresentMon-LICENSE.txt') $stage
+Copy-Item (Join-Path $root 'third_party\qrcode-generator-LICENSE.txt') $stage   # built into the program (the phone QR code, #18)
 # the native program contains .NET runtime code (NativeAOT): its licence and third-party notices ship too, from the
 # runtime pack this build used (version from the build's project.assets.json)
 $assets = Get-Content (Join-Path $root 'src\obj\project.assets.json') -Raw | ConvertFrom-Json

@@ -128,7 +128,10 @@ function Post([string]$url, [string]$body, [string]$origin, [string]$ctype = 'ap
     catch { if ($_.Exception.Response) { return [int]$_.Exception.Response.StatusCode } return -1 }
 }
 function WaitUp([int]$port) { for ($i = 0; $i -lt 40; $i++) { try { return (Invoke-WebRequest "http://127.0.0.1:$port/api/settings" -UseBasicParsing -TimeoutSec 2).Content | ConvertFrom-Json } catch { Start-Sleep -Milliseconds 250 } }; return $null }
-$sf = Join-Path $env:TEMP ('svsperf_selftest_settings_' + [guid]::NewGuid().ToString('N').Substring(0, 6) + '.json')
+# in a folder of its own: a hosted group's files (relay-members.json, relay-key.bin) go next to the settings
+$sfDir = Join-Path $env:TEMP ('svsperf_selftest_settings_' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+New-Item -ItemType Directory $sfDir | Out-Null
+$sf = Join-Path $sfDir 'settings.json'
 '{"port":8798,"openDashboardOnStart":false,"mainLoopBreakdown":false}' | Set-Content $sf -Encoding ascii
 $inst = 'SVSPerfSelfTest_' + [guid]::NewGuid().ToString('N').Substring(0, 6)
 $stArgs = @('--tray', '--tray-child', '--no-frames', '--settings', "`"$sf`"", '--instance', $inst)   # quoted: PS 5.1 joins -ArgumentList without quoting + @(if ($Lan) { '--lan' })
@@ -185,6 +188,25 @@ try {
 }
 $v5 = WaitUp 8794
 Check ($v5.frameTimes -in @('ready', 'signout', 'setup', 'missing')) "settings: the page learns the frame-times state ($($v5.frameTimes))"
+# 0.6 (#18) the host PC in its own group: hosting + "Also share this PC", invite links from the public address
+$script:tok = $v5.token
+$b6 = '{"version":1,"port":8794,"openDashboardOnStart":false,"hostGroup":true,"groupPort":8792,"groupInviteAddress":"perf.example.com","hostSharesSelf":true,"hostSelfName":"Host"}'
+Check ((Post 'http://127.0.0.1:8794/api/settings' $b6 'http://127.0.0.1:8794') -eq 200) "host: hosting a group and sharing this PC with it is accepted"
+$v6 = $null; for ($i = 0; $i -lt 20 -and -not ($v6 -and $v6.sharing -eq 'sharing'); $i++) { Start-Sleep -Milliseconds 500; $v6 = WaitUp 8794 }
+Check ($v6.settings.shareWithGroup -and $v6.settings.groupAddress -eq 'http://127.0.0.1:8792' -and $v6.settings.inviteCode.Length -eq 29 -and
+       @($v6.members | Where-Object name -eq 'Host').Count -eq 1 -and $v6.sharing -eq 'sharing' -and $v6.sharingAs -eq 'Host') "host: this PC joined its own group with a code nobody handles, and shares ($($v6.sharing))"
+$script:tok = $v6.token
+$addr = try { (Invoke-WebRequest 'http://127.0.0.1:8794/api/group-members' -Method Post -Body '{"add":"Friend"}' -ContentType 'application/json' -Headers @{ Origin = 'http://127.0.0.1:8794'; 'X-SVS-Token' = $script:tok } -UseBasicParsing).Content | ConvertFrom-Json } catch { $null }
+Check ($addr.link -match '^https://perf\.example\.com/join#([A-Z2-9]{4}-){5}[A-Z2-9]{4}$' -and $addr.link.EndsWith($addr.code)) "host: adding someone gives a one-click invite link ($($addr.link -replace '#.*', '#…'))"
+$jp = try { (Invoke-WebRequest 'http://127.0.0.1:8792/join' -UseBasicParsing).Content } catch { '' }
+Check ($jp -match 'svsperf://join/' -and $jp -match '/api/signin') "invite: the group serves the join page"
+$who = try { (Invoke-WebRequest 'http://127.0.0.1:8792/api/whoami' -Headers @{ Authorization = "Bearer $($addr.code)" } -UseBasicParsing).Content | ConvertFrom-Json } catch { $null }
+$who401 = try { $null = Invoke-WebRequest 'http://127.0.0.1:8792/api/whoami' -Headers @{ Authorization = 'Bearer AAAA-BBBB-CCCC-DDDD-EEEE-FFFF' } -UseBasicParsing; 200 } catch { [int]$_.Exception.Response.StatusCode }
+Check ($who.name -eq 'Friend' -and $who401 -eq 401) "invite: the app can ask who a code belongs to (and a wrong code gets 401)"
+$b7 = $b6.Replace('"hostSharesSelf":true', '"hostSharesSelf":false')
+$v7 = $null
+if ((Post 'http://127.0.0.1:8794/api/settings' $b7 'http://127.0.0.1:8794') -eq 200) { Start-Sleep -Milliseconds 1500; $v7 = WaitUp 8794 }
+Check ($v7 -and -not $v7.settings.shareWithGroup -and $v7.sharing -eq 'off') "host: 'Also share this PC' off stops this PC's sharing"
 $null = & $exe --exit --instance $inst
 Check ($LASTEXITCODE -eq 0 -and $st.WaitForExit(15000)) "settings: the tray app still exits cleanly"
 
@@ -211,7 +233,7 @@ if (-not $isAdmin) {
 }
 # phone / home network (#9) off = no phone address offered (turning it on needs a permission prompt: manual test)
 Check (@($v5.networkUrls).Count -eq 0 -and -not $v5.settings.homeNetwork) "home network off: the page offers no phone address"
-Remove-Item $sf -ErrorAction SilentlyContinue
+Remove-Item $sfDir -Recurse -ErrorAction SilentlyContinue
 
 # the published pair (-Exe publish\SVSPerfMonitor.com): the starter SVSPerfMonitor.exe next to it
 $starter = [IO.Path]::ChangeExtension($exe, '.exe')
@@ -317,6 +339,17 @@ try {
 } finally {
     if (-not $srv.HasExited) { Stop-Process -Id $srv.Id -ErrorAction SilentlyContinue }
     Remove-Item $prof -Recurse -ErrorAction SilentlyContinue
+}
+
+# 0.6 invites (#18): the forms an invite link may take; anything else is refused
+foreach ($c in @(@('https://perf.example.com/join#abcd-efgh-jkmn-pqrs-tuvw-xyz2', 'https://perf.example.com/|ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2'),
+                 @('svsperf://join/?a=https%3A%2F%2Fperf.example.com%3A9443&c=ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2', 'https://perf.example.com:9443/|ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2'),
+                 @('http://perf.example.com/join#ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2', 'no'), @('https://perf.example.com/other#ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2', 'no'),
+                 @('https://perf.example.com/join#ABCD', 'no'), @('svsperf://join/?a=javascript%3Aalert(1)&c=ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2', 'no'),
+                 @('https://user:pw@perf.example.com/join#ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2', 'https://perf.example.com/|ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2'))) {   # (a user:password part is dropped)
+    $got = (& { $ErrorActionPreference = 'Continue'; $c[0] | & $exe --parse-invite 2>$null }) -join ''
+    $ok = if ($c[1] -eq 'no') { $got -like 'no:*' } else { $got -eq $c[1] }
+    Check $ok "invite link: [$($c[0] -replace '#.*', '#…' -replace '&c=.*', '&c=…')] -> $($got -replace '\|.*', '|…')"
 }
 
 # 0.6 dedicated server (#17): the game with -server is a server: no frame capture, a main-thread verdict

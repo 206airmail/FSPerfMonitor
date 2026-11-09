@@ -51,7 +51,11 @@ public sealed class MonitorHost : IDisposable
         _logsAt = DateTime.UtcNow;
         List<LogSource> found;
         try { found = LogSources.Find(_o.ProfileDir, fsp); } catch { return; }
+        List<LogTail> retired;
         lock (_logsLock) {
+            var ids = found.Select(f => f.Id).ToHashSet();
+            retired = _logs.Where(kv => kv.Key != LogSources.Game && !ids.Contains(kv.Key)).Select(kv => kv.Value.Tail).ToList();
+            foreach (var k in _logs.Keys.Where(k => k != LogSources.Game && !ids.Contains(k)).ToList()) _logs.Remove(k);
             foreach (var src in found) {
                 if (_logs.ContainsKey(src.Id) || _logs.Count >= LogSources.Max) continue;
                 var t = new LogTail(src.Path, ringSize: 3000);
@@ -59,6 +63,7 @@ public sealed class MonitorHost : IDisposable
                 t.Start();
             }
         }
+        foreach (var t in retired) t.Dispose();
     }
 
     // throws when the dashboard port can't be opened (e.g. in use): the caller reports it

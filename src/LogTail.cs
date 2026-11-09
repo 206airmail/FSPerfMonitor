@@ -37,6 +37,9 @@ public sealed class LogTail : IDisposable
 
     private long _next = 1;                  // seq of the next line (under _gate)
     private long _lastMarker;                // seq of the newest restart marker, 0 = none (under _gate)
+    private readonly long _charBudget;       // detached rings (the relay): at most this many characters kept (0 = no limit)
+    private long _chars;                     // characters in [_first, _next) (under _gate; budgeted rings only)
+    private long _first = 1;                 // oldest seq still kept by the budget (under _gate; budgeted rings only)
     private int _ticks;
 
     public string Epoch { get; } = Guid.NewGuid().ToString("N")[..8];   // changes when FSPerf restarts (seq starts over)
@@ -46,8 +49,9 @@ public sealed class LogTail : IDisposable
     public event Action<IReadOnlyList<LogLine>>? Appended;
     public event Action? Heartbeat;
 
-    public LogTail(string path, int ringSize = 5000, int pollMs = 400, int initialBytes = 1024 * 1024)
+    public LogTail(string path, int ringSize = 5000, int pollMs = 400, int initialBytes = 1024 * 1024, long charBudget = 0)
     {
+        _charBudget = charBudget;
         _path = path;
         _ring = new LogLine[Math.Max(16, ringSize)];
         _pollMs = Math.Max(50, pollMs);
@@ -74,7 +78,7 @@ public sealed class LogTail : IDisposable
     public List<LogLine> Snapshot(long after, int n, out bool gap)
     {
         lock (_gate) {
-            long last = _next - 1, first = Math.Max(1, _next - _ring.Length);
+            long last = _next - 1, first = Math.Max(Math.Max(1, _next - _ring.Length), _first);
             gap = false;
             long from;
             if (after < 0) from = Math.Max(Math.Max(first, last - Math.Max(0, n) + 1), _lastMarker);
@@ -103,7 +107,8 @@ public sealed class LogTail : IDisposable
 
     // a ring fed by someone else instead of a file (#14: a group member's shared log on the relay): never Start()ed; lines
     // come in through Append, the keep-alive through Beat
-    public static LogTail Detached(int ringSize) => new("", ringSize);
+    // charBudget bounds its memory whatever the line lengths (Codex #15: 10,000 lines of 4,000 characters is 80 MB)
+    public static LogTail Detached(int ringSize, long charBudget = 0) => new("", ringSize, charBudget: charBudget);
 
     // numbers the lines (their Seq is replaced), keeps them and tells the viewers
     public void Append(List<LogLine> batch)
@@ -111,10 +116,16 @@ public sealed class LogTail : IDisposable
         if (batch.Count == 0) return;
         lock (_gate) {
             for (int i = 0; i < batch.Count; i++) {
+                long overwritten = _next - _ring.Length;   // the line this one replaces in the ring (if still counted)
+                if (_charBudget > 0 && overwritten >= _first) { _chars -= _ring[overwritten % _ring.Length].Text.Length; _first = overwritten + 1; }
                 var l = batch[i] with { Seq = _next++ };
                 batch[i] = l;
                 _ring[l.Seq % _ring.Length] = l;
                 if (l.Marker) _lastMarker = l.Seq;
+                if (_charBudget > 0) {
+                    _chars += l.Text.Length;
+                    while (_chars > _charBudget && _first < l.Seq) { _chars -= _ring[_first % _ring.Length].Text.Length; _ring[_first % _ring.Length] = default; _first++; }
+                }
             }
             try { Appended?.Invoke(batch); } catch { }
         }

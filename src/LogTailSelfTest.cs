@@ -29,6 +29,15 @@ public static class LogTailSelfTest
         Directory.CreateDirectory(dir);
         string log = Path.Combine(dir, "log.txt");
         try {
+            // a relay ring with a character budget (#15 review): the oldest lines go, the newest stay, numbering goes on
+            using (var b = LogTail.Detached(100, charBudget: 50)) {
+                for (int i = 0; i < 10; i++) b.Append(new List<LogLine> { new(0, $"line{i:00}....", false) });   // 10 characters each
+                var kept = b.Snapshot(0, 100, out bool gap);
+                Check(kept.Count == 5 && kept[^1].Text == "line09...." && kept[0].Text == "line05...." && gap && b.LastSeq == 10,
+                    $"budgeted ring keeps the newest lines within its characters ({kept.Count} kept, gap {gap})");
+                for (int i = 0; i < 200; i++) b.Append(new List<LogLine> { new(0, "x", false) });   // wraps the ring: counts stay right
+                Check(b.Snapshot(0, 100, out _).Count == 50, "budgeted ring: after wrapping, the ring size is the limit for short lines");
+            }
             // no file yet: nothing, no crash
             using (var t0 = new LogTail(log, 100, 100)) Check(!t0.Poll() && t0.LastSeq == 0, "missing file: no lines, no crash");
 

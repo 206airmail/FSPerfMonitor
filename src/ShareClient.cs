@@ -25,6 +25,7 @@ public sealed class ShareClient : IDisposable
     private Thread? _thread;
     // per log: the relay's newest line of ours (-1 = none of this tail's run yet) and the tail run that ack belongs to
     private readonly Dictionary<string, (string Epoch, long Ack)> _acks = new();
+    private int _turn;   // which log goes first this time: every log gets the byte budget in turn (Codex #15)
     private int _maxLines = RelayServer.MaxLinesPerPush;   // halved when the relay finds a send too big, back up after success
 
     // what the Settings page and the tray say: "connecting" | "sharing" | "bad-code" | "unreachable"
@@ -95,10 +96,12 @@ public sealed class ShareClient : IDisposable
         var snap = _snapshot();
         // relaxed escaping keeps non-ASCII letters as they are, so the redaction sees "Jörg", not "J\u00F6rg"
         sb.Append(snap != null ? Redactor.Apply(JsonSerializer.Serialize(snap, FsperfJson.RelaxedSnapshot)) : "null");
+        sb.Append(",\"all\":[").Append(string.Join(",", logs.Select(l => JsonSerializer.Serialize(l.Src.Id, FsperfJson.Default.String)))).Append(']');
         sb.Append(",\"logs\":[");
         int bytes = Encoding.UTF8.GetByteCount(sb.ToString());
         bool more = false, firstLog = true;
-        foreach (var (src, tail) in logs) {
+        int start = logs.Count == 0 ? 0 : _turn++ % logs.Count;
+        foreach (var (src, tail) in logs.Skip(start).Concat(logs.Take(start))) {
             string epoch = tail.Epoch;
             long after = _acks.TryGetValue(src.Id, out var a) && a.Epoch == epoch ? a.Ack : -1;
             List<LogLine> lines;

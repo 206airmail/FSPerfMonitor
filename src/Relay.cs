@@ -53,7 +53,8 @@ public sealed class RelayMembers
     {
         List<string> gone;
         lock (_lock) gone = ReloadLocked();
-        foreach (var id in gone) { try { Removed?.Invoke(id); } catch { } }
+        // on a thread of their own: Reload runs inside callers' locks (the relay's), and a removal takes the relay's locks
+        foreach (var id in gone) ThreadPool.QueueUserWorkItem(_ => { try { Removed?.Invoke(id); } catch { } });
     }
 
     public static string DefaultFile => Path.Combine(Path.GetDirectoryName(SettingsStore.FilePath)!, "relay-members.json");
@@ -115,7 +116,7 @@ public sealed class RelayMembers
             _list.RemoveAt(i);
             try { SaveLocked(); } catch { _list.Insert(i, m); return false; }
         }
-        try { Removed?.Invoke(id); } catch { }
+        ThreadPool.QueueUserWorkItem(_ => { try { Removed?.Invoke(id); } catch { } });
         return true;
     }
 
@@ -171,6 +172,8 @@ public sealed class RelayMembers
 public sealed class RelayServer : IDisposable
 {
     public const int MaxBody = 512 * 1024, MaxLinesPerPush = 1000, RingLines = 10000, PluginRingLines = 3000;
+    // characters kept per log (a line is up to 4,000): ~6 MB for a member's game log, ~2 MB for each other log
+    public const long GameChars = 3_000_000, OtherChars = 1_000_000;
     private const int RequestDeadlineMs = 10000, SessionDays = 30;
     // everything on this port comes from the internet: bounded work at every step (Codex #14)
     private const int MaxActive = 64, MaxLiveViews = 128, MaxSmallBody = 4 * 1024;
@@ -208,7 +211,7 @@ public sealed class RelayServer : IDisposable
             public readonly LogHub Hub;
             public string Epoch = "";  // the sharer's tail run for this log: a new one = their app restarted
             public long LastSeq;       // the newest line of theirs we have (their numbering)
-            public Source(int ring) { Hub = new LogHub(LogTail.Detached(ring), 8); }
+            public Source(bool game) { Hub = new LogHub(LogTail.Detached(game ? RingLines : PluginRingLines, game ? GameChars : OtherChars), 8); }
         }
 
         public Source? Get(string id, bool create)
@@ -216,8 +219,19 @@ public sealed class RelayServer : IDisposable
             lock (this) {
                 if (Logs.TryGetValue(id, out var src)) return src;
                 if (!create || Logs.Count >= LogSources.Max) return null;
-                return Logs[id] = new Source(id == LogSources.Game ? RingLines : PluginRingLines);
+                return Logs[id] = new Source(id == LogSources.Game);
             }
+        }
+
+        // logs the sharer no longer has (a plugin removed, another set after a restart): their slots come free
+        public void Keep(HashSet<string> ids)
+        {
+            List<Source> gone;
+            lock (this) {
+                gone = Logs.Where(kv => !ids.Contains(kv.Key) && kv.Key != LogSources.Game).Select(kv => kv.Value).ToList();
+                foreach (var k in Logs.Keys.Where(k => !ids.Contains(k) && k != LogSources.Game).ToList()) Logs.Remove(k);
+            }
+            foreach (var g in gone) g.Hub.Dispose();
         }
 
         public List<string> Ids() { lock (this) return Logs.Keys.OrderBy(k => k == LogSources.Game ? 0 : k == "fsp" ? 1 : k == "loader" ? 2 : 3).ThenBy(k => k, StringComparer.OrdinalIgnoreCase).ToList(); }
@@ -501,6 +515,7 @@ public sealed class RelayServer : IDisposable
         int port = 0;
         string? snapshot = null;
         var logs = new List<PushLog>();
+        HashSet<string>? all = null;   // every log the sharer has (sends may carry only some of them)
         try {
             using var doc = JsonDocument.Parse(body, new JsonDocumentOptions { MaxDepth = 32 });
             var root = doc.RootElement;
@@ -514,6 +529,9 @@ public sealed class RelayServer : IDisposable
                     if (snap != null) snapshot = JsonSerializer.Serialize(snap, FsperfJson.Default.Snapshot);
                 } catch { }
             }
+            if (root.TryGetProperty("all", out var al) && al.ValueKind == JsonValueKind.Array)
+                all = al.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!)
+                        .Where(LogSources.ValidId).Take(LogSources.Max).ToHashSet();
             int total = 0;
             if (root.TryGetProperty("logs", out var ls) && ls.ValueKind == JsonValueKind.Array) {
                 foreach (var lg in ls.EnumerateArray()) {
@@ -563,6 +581,7 @@ public sealed class RelayServer : IDisposable
         var resync = new List<string>();
         lock (share) {   // one push per member at a time: the epoch / LastSeq bookkeeping and the order of the lines
             lock (_lock) { share.Name = m.Name; share.LastPush = DateTime.UtcNow; share.Port = port; share.Run = run; }
+            if (all != null) share.Keep(all);
             foreach (var lg in logs) {
                 var src = share.Get(lg.Id, create: lg.After < 0);
                 if (src == null || (src.Epoch != lg.Epoch && lg.After >= 0)) {
@@ -572,7 +591,7 @@ public sealed class RelayServer : IDisposable
                 var batch = new List<LogLine>();
                 if (src.Epoch != lg.Epoch) {
                     // their app restarted (its numbering starts over): a marker, so a fresh view starts at their new run
-                    if (src.Epoch.Length > 0 && lg.Id == LogSources.Game) batch.Add(new LogLine(0, $"=== {m.Name} started sharing again ===", true));
+                    if (src.Epoch.Length > 0) batch.Add(new LogLine(0, lg.Id == LogSources.Game ? $"=== {m.Name} started sharing again ===" : $"=== {LogSources.LabelFor(lg.Id)}: {m.Name} started sharing again ===", true));
                     src.Epoch = lg.Epoch;
                     src.LastSeq = 0;
                 }

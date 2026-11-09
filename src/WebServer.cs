@@ -159,8 +159,12 @@ public sealed class WebServer : IDisposable
         if (id.Length == 0) return null;
         lock (_lock) {
             if (_stop) return null;
-            if (_logHubs.TryGetValue(id, out var h)) return h;
             var tail = Host?.TailFor(id) ?? (id == LogSources.Game ? _gameTail : null);
+            if (_logHubs.TryGetValue(id, out var h)) {
+                if (tail != null && ReferenceEquals(h.Tail, tail)) return h;
+                _logHubs.Remove(id);
+                h.Dispose();   // its log was retired (a plugin removed) or replaced: its viewers reconnect
+            }
             if (tail == null) return null;
             return _logHubs[id] = new LogHub(tail, 8);
         }

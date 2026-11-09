@@ -23,7 +23,8 @@ public sealed class WebServer : IDisposable
     private readonly TcpListener _listener;
     private readonly EventHub _events = new(16);
     private readonly SemaphoreSlim _downloads = new(2, 2);   // log downloads at a time
-    private readonly LogHub? _logs;
+    private readonly LogTail? _gameTail;
+    private readonly Dictionary<string, LogHub> _logHubs = new();   // log source id -> its viewers (#15; under _lock)
     private readonly byte[] _logPage;
     private const int RequestDeadlineMs = 10000;
     private readonly object _lock = new();
@@ -36,7 +37,7 @@ public sealed class WebServer : IDisposable
     {
         _port = port; _lanMode = lan;
         _hosts = BuildHosts(); _hostsAt = DateTime.UtcNow;
-        if (tail != null) _logs = new LogHub(tail, 8);
+        _gameTail = tail;
         _listener = new TcpListener(lan ? IPAddress.Any : IPAddress.Loopback, port);
         using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("index.html")!;
         using var ms = new MemoryStream();
@@ -115,13 +116,15 @@ public sealed class WebServer : IDisposable
             if (route == "/welcome") { Send(stream, 200, "text/html; charset=utf-8", _welcomePage); c.Close(); return; }
             if (Assets.TryGetValue(route, out var asset)) { Send(stream, 200, asset.Type, asset.Body, cache: true); c.Close(); return; }
             if (path == "/events") { _events.Serve(c, stream); return; }   // kept open; Publish writes to it
-            if (route == "/log/stream" && _logs != null) {
-                _logs.Serve(c, stream, path, lastEventId);
+            if (route == "/api/logs") { Send(stream, 200, "application/json", Encoding.UTF8.GetBytes(LogListJson(Host?.Logs().Select(l => l.Src) ?? []))); c.Close(); return; }
+            if (route == "/log/stream" && HubFor(SourceOf(path)) is { } hub) {
+                hub.Serve(c, stream, path, lastEventId);
                 return;  // kept open; the tail writes to it
             }
-            if (route == "/log/download" && _logs != null) {
+            if (route == "/log/download" && HubFor(SourceOf(path)) is { } dhub) {
+                string src = SourceOf(path);
                 if (!_downloads.Wait(0)) Send(stream, 503, "text/plain", Encoding.ASCII.GetBytes("busy, try again in a moment"));
-                else try { _logs.Download(stream, "game"); } finally { _downloads.Release(); }
+                else try { dhub.Download(stream, src == LogSources.Game ? "game" : LogSources.LabelFor(src)); } finally { _downloads.Release(); }
                 c.Close();
                 return;
             }
@@ -133,6 +136,43 @@ public sealed class WebServer : IDisposable
         } catch {
             try { c.Close(); } catch { }
         }
+    }
+
+    // ---- log sources (#15) --------------------------------------------------------------------------------------------
+    // ?src=<id> on /log/stream and /log/download ("game" when missing); the hub is made on first use for a known source
+    internal static string SourceOf(string path)
+    {
+        int q = path.IndexOf('?');
+        if (q >= 0) {
+            foreach (var kv in path[(q + 1)..].Split('&')) {
+                if (!kv.StartsWith("src=", StringComparison.Ordinal)) continue;
+                string v;
+                try { v = Uri.UnescapeDataString(kv[4..]); } catch { return ""; }
+                return LogSources.ValidId(v) ? v : "";
+            }
+        }
+        return LogSources.Game;
+    }
+
+    private LogHub? HubFor(string id)
+    {
+        if (id.Length == 0) return null;
+        lock (_lock) {
+            if (_stop) return null;
+            if (_logHubs.TryGetValue(id, out var h)) return h;
+            var tail = Host?.TailFor(id) ?? (id == LogSources.Game ? _gameTail : null);
+            if (tail == null) return null;
+            return _logHubs[id] = new LogHub(tail, 8);
+        }
+    }
+
+    // GET /api/logs: [{"id","label"}] in the page's order (the game's log first)
+    internal static string LogListJson(IEnumerable<LogSource> sources)
+    {
+        var list = sources.ToList();
+        if (list.Count == 0) list.Add(new LogSource(LogSources.Game, LogSources.LabelFor(LogSources.Game), ""));
+        string S(string v) => System.Text.Json.JsonSerializer.Serialize(v, FsperfJson.Default.String);
+        return "[" + string.Join(",", list.Select(l => $"{{\"id\":{S(l.Id)},\"label\":{S(l.Label)}}}")) + "]";
     }
 
     // ---- Host header check (DNS rebinding): every route -------------------------------------------------------------
@@ -331,6 +371,8 @@ public sealed class WebServer : IDisposable
         _stop = true;
         try { _listener.Stop(); } catch { }
         _events.Dispose();
-        _logs?.Dispose();
+        List<LogHub> hubs;
+        lock (_lock) { hubs = _logHubs.Values.ToList(); _logHubs.Clear(); }
+        foreach (var h in hubs) h.Dispose();
     }
 }

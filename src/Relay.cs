@@ -170,7 +170,7 @@ public sealed class RelayMembers
 
 public sealed class RelayServer : IDisposable
 {
-    public const int MaxBody = 512 * 1024, MaxLinesPerPush = 1000, RingLines = 10000;
+    public const int MaxBody = 512 * 1024, MaxLinesPerPush = 1000, RingLines = 10000, PluginRingLines = 3000;
     private const int RequestDeadlineMs = 10000, SessionDays = 30;
     // everything on this port comes from the internet: bounded work at every step (Codex #14)
     private const int MaxActive = 64, MaxLiveViews = 128, MaxSmallBody = 4 * 1024;
@@ -183,7 +183,7 @@ public sealed class RelayServer : IDisposable
     private readonly Dictionary<string, Share> _shares = new();                       // member id -> what they share (under _lock)
     private readonly Dictionary<string, (int Count, DateTime Since)> _failures = new();         // client address -> failed sign-ins
     private readonly Dictionary<string, List<TcpClient>> _views = new();   // viewer member id -> their open live views (under _lock)
-    private readonly Dictionary<string, string> _stopped = new();          // member id -> the run (epoch) that stopped sharing (under _lock)
+    private readonly Dictionary<string, string> _stopped = new();          // member id -> the sharing run that stopped (under _lock)
     private readonly SemaphoreSlim _downloads = new(2, 2);
     private int _active;                                                    // requests being handled right now
     private readonly Timer _sweep;
@@ -197,13 +197,39 @@ public sealed class RelayServer : IDisposable
         public readonly string MemberId;
         public string Name;
         public readonly EventHub Events = new(8);
-        public readonly LogHub Logs;
-        public string Epoch = "";      // the sharer's own log epoch: a new one = their app restarted
+        public readonly Dictionary<string, Source> Logs = new();   // log id ("game", "fsp", "plugin:<Name>"...) -> its lines (under the share's lock)
+        public string Run = "";        // the sharer's current sharing run (a stop names it)
         public int Port;               // their PC's dashboard port: "Settings on this PC" for this member's own browsers
-        public long LastSeq;           // the newest line of theirs we have (their numbering)
         public DateTime Since = DateTime.UtcNow, LastPush = DateTime.MinValue;   // LastPush: the last ACCEPTED push
-        public Share(string id, string name) { MemberId = id; Name = name; Logs = new LogHub(LogTail.Detached(RingLines), 8); }
-        public void Dispose() { Events.Dispose(); Logs.Dispose(); }
+        public Share(string id, string name) { MemberId = id; Name = name; }
+
+        public sealed class Source
+        {
+            public readonly LogHub Hub;
+            public string Epoch = "";  // the sharer's tail run for this log: a new one = their app restarted
+            public long LastSeq;       // the newest line of theirs we have (their numbering)
+            public Source(int ring) { Hub = new LogHub(LogTail.Detached(ring), 8); }
+        }
+
+        public Source? Get(string id, bool create)
+        {
+            lock (this) {
+                if (Logs.TryGetValue(id, out var src)) return src;
+                if (!create || Logs.Count >= LogSources.Max) return null;
+                return Logs[id] = new Source(id == LogSources.Game ? RingLines : PluginRingLines);
+            }
+        }
+
+        public List<string> Ids() { lock (this) return Logs.Keys.OrderBy(k => k == LogSources.Game ? 0 : k == "fsp" ? 1 : k == "loader" ? 2 : 3).ThenBy(k => k, StringComparer.OrdinalIgnoreCase).ToList(); }
+        public List<LogTail> Tails() { lock (this) return Logs.Values.Select(v => v.Hub.Tail).ToList(); }
+
+        public void Dispose()
+        {
+            Events.Dispose();
+            List<Source> all;
+            lock (this) { all = Logs.Values.ToList(); Logs.Clear(); }
+            foreach (var x in all) x.Hub.Dispose();
+        }
     }
 
     public RelayServer(int port, RelayMembers members)
@@ -259,7 +285,7 @@ public sealed class RelayServer : IDisposable
             PruneViewsLocked();
         }
         foreach (var s in drop) s.Dispose();
-        foreach (var s in live) s.Logs.Tail.Beat();
+        foreach (var s in live) foreach (var t in s.Tails()) t.Beat();
     }
 
     // a removed member: their share goes (its viewers are closed), and so does everything they are watching; their
@@ -376,15 +402,31 @@ public sealed class RelayServer : IDisposable
             switch (sub) {
                 case "": Send(stream, 200, "text/html; charset=utf-8", MemberPage(_dashPage, s.Name, MyPort(me))); return false;
                 case "log": Send(stream, 200, "text/html; charset=utf-8", MemberPage(_logPage, s.Name, MyPort(me))); return false;
-                case "events":
-                case "log/stream":
-                    if (!AddView(me.Id, c)) { Send(stream, 503, "text/plain", "too many live views"); return false; }
-                    if (sub == "events") s.Events.Serve(c, stream); else s.Logs.Serve(c, stream, r.Path, r.LastEventId);
-                    return true;
-                case "log/download":
-                    if (!_downloads.Wait(0)) { Send(stream, 503, "text/plain", "busy, try again in a moment"); return false; }
-                    try { s.Logs.Download(stream, s.Name); } finally { _downloads.Release(); }
+                case "api/logs": {   // #15: the logs this member shares, the game's first
+                    var ids = s.Ids();
+                    if (!ids.Contains(LogSources.Game)) ids.Insert(0, LogSources.Game);
+                    Send(stream, 200, "application/json", WebServer.LogListJson(ids.Select(i => new LogSource(i, LogSources.LabelFor(i), ""))));
                     return false;
+                }
+                case "events":
+                    if (!AddView(me.Id, c)) { Send(stream, 503, "text/plain", "too many live views"); return false; }
+                    s.Events.Serve(c, stream);
+                    return true;
+                case "log/stream": {
+                    var src = s.Get(WebServer.SourceOf(r.Path), create: false);
+                    if (src == null) { Send(stream, 404, "text/plain", "not shared"); return false; }
+                    if (!AddView(me.Id, c)) { Send(stream, 503, "text/plain", "too many live views"); return false; }
+                    src.Hub.Serve(c, stream, r.Path, r.LastEventId);
+                    return true;
+                }
+                case "log/download": {
+                    string lid = WebServer.SourceOf(r.Path);
+                    var src = s.Get(lid, create: false);
+                    if (src == null) { Send(stream, 404, "text/plain", "not shared"); return false; }
+                    if (!_downloads.Wait(0)) { Send(stream, 503, "text/plain", "busy, try again in a moment"); return false; }
+                    try { src.Hub.Download(stream, lid == LogSources.Game ? s.Name : s.Name + "-" + LogSources.LabelFor(lid)); } finally { _downloads.Release(); }
+                    return false;
+                }
             }
         }
         Send(stream, 404, "text/plain", "not found");
@@ -417,12 +459,12 @@ public sealed class RelayServer : IDisposable
         switch (r.Route) {
             case "/api/push": Push(stream, sender!, body); return;
             case "/api/stop": {
-                // {"epoch":"<the run that stops>"}: a push of that run arriving late is refused (it must not bring the
-                // share back); a new run (the app started again) shares normally
-                string epoch = "";
-                try { using var d = JsonDocument.Parse(body); if (d.RootElement.TryGetProperty("epoch", out var e) && e.ValueKind == JsonValueKind.String) epoch = e.GetString() ?? ""; } catch { }
+                // {"run":"<the sharing run that stops>"}: a push of that run arriving late is refused (it must not bring
+                // the share back); a new run (sharing turned on again, the app started again) shares normally
+                string run = "";
+                try { using var d = JsonDocument.Parse(body); if (d.RootElement.TryGetProperty("run", out var e) && e.ValueKind == JsonValueKind.String) run = e.GetString() ?? ""; } catch { }
                 Share? s;
-                lock (_lock) { _shares.Remove(sender!.Id, out s); if (epoch.Length is > 0 and <= 32) _stopped[sender.Id] = epoch; }
+                lock (_lock) { _shares.Remove(sender!.Id, out s); if (run.Length is > 0 and <= 32) _stopped[sender.Id] = run; }
                 s?.Dispose();
                 Send(stream, 200, "application/json", "{}");
                 return;
@@ -438,29 +480,32 @@ public sealed class RelayServer : IDisposable
     }
 
     // ---- sharing: POST /api/push --------------------------------------------------------------------------------------
-    // Authorization: Bearer <invite code>. Body: {"epoch":"<their log epoch>","snapshot":{...}|null,"lines":[[seq,"text",0|1],...]}
-    //   + "after": the newest line of theirs they believe we have (-1 = none: they send their recent history).
-    // Answer: {"name":"<their name in the group>","ack":<their newest line we have>} - they send what comes after it next.
-    // 409 {"resync":true}: we don't know their run (we restarted, or forgot them after a quiet spell) although they
-    // think we do: they send their recent history again (after = -1), so nothing they still have is skipped.
-    // 409 "stopped": that run stopped sharing; a late push of it is ignored.
+    // Authorization: Bearer <invite code>. Body (#15):
+    //   {"run":"<this sharing run>","port":<their dashboard port>,"snapshot":{...}|null,
+    //    "logs":[{"id":"game"|"fsp"|"loader"|"plugin:<Name>","epoch":"<that tail's run>","after":<n>,"lines":[[seq,"text",0|1],...]}]}
+    // "after": the newest line of that log they believe we have (-1 = none: they send its recent history).
+    // Answer: {"name":"<their name>","acks":{"<id>":<their newest line we have>},"resync":["<id>",...]}: a log in "resync"
+    // is one we don't know (we restarted, or forgot them after a quiet spell) although they think we do: they send its
+    // recent history again, so nothing they still have is skipped.
+    // 409 "stopped": that sharing run stopped; a late push of it is ignored.
+    private const int MaxLinesInPush = 4000;
 
     private RelayMember? Sender(Request r) =>
         r.Auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? _members.Find(r.Auth[7..]) : null;
 
+    private sealed record PushLog(string Id, string Epoch, long After, List<(long Seq, string Text, bool Marker)> Lines);
+
     private void Push(NetworkStream stream, RelayMember m, byte[] body)
     {
-        string epoch;
-        long after = -1;
+        string run;
         int port = 0;
         string? snapshot = null;
-        var lines = new List<(long Seq, string Text, bool Marker)>();
+        var logs = new List<PushLog>();
         try {
             using var doc = JsonDocument.Parse(body, new JsonDocumentOptions { MaxDepth = 32 });
             var root = doc.RootElement;
-            epoch = root.TryGetProperty("epoch", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString()! : "";
-            if (epoch.Length is 0 or > 32) throw new FormatException();
-            if (root.TryGetProperty("after", out var af) && af.TryGetInt64(out long a)) after = a;
+            run = root.TryGetProperty("run", out var rn) && rn.ValueKind == JsonValueKind.String ? rn.GetString()! : "";
+            if (run.Length is 0 or > 32) throw new FormatException();
             if (root.TryGetProperty("port", out var pt) && pt.TryGetInt32(out int pv) && pv is >= 1 and <= 65535) port = pv;
             if (root.TryGetProperty("snapshot", out var sn) && sn.ValueKind == JsonValueKind.Object) {
                 // only what the dashboard knows, typed: a number stays a number, a text stays text (the pages escape text)
@@ -469,15 +514,29 @@ public sealed class RelayServer : IDisposable
                     if (snap != null) snapshot = JsonSerializer.Serialize(snap, FsperfJson.Default.Snapshot);
                 } catch { }
             }
-            if (root.TryGetProperty("lines", out var ls) && ls.ValueKind == JsonValueKind.Array) {
-                foreach (var l in ls.EnumerateArray()) {
-                    if (lines.Count >= MaxLinesPerPush) break;
-                    if (l.ValueKind != JsonValueKind.Array || l.GetArrayLength() < 2) continue;
-                    if (!l[0].TryGetInt64(out long seq) || l[1].ValueKind != JsonValueKind.String) continue;
-                    string text = l[1].GetString() ?? "";
-                    if (text.Length > LogTail.MaxLineChars) text = text[..LogTail.MaxLineChars];
-                    bool marker = l.GetArrayLength() > 2 && l[2].ValueKind == JsonValueKind.Number && l[2].GetInt32() == 1;
-                    lines.Add((seq, text, marker));
+            int total = 0;
+            if (root.TryGetProperty("logs", out var ls) && ls.ValueKind == JsonValueKind.Array) {
+                foreach (var lg in ls.EnumerateArray()) {
+                    if (logs.Count >= LogSources.Max) break;
+                    if (lg.ValueKind != JsonValueKind.Object) continue;
+                    string id = lg.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.String ? i.GetString() ?? "" : "";
+                    string epoch = lg.TryGetProperty("epoch", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() ?? "" : "";
+                    if (!LogSources.ValidId(id) || epoch.Length is 0 or > 32 || logs.Any(x => x.Id == id)) continue;
+                    long after = lg.TryGetProperty("after", out var af) && af.TryGetInt64(out long a) ? a : -1;
+                    var lines = new List<(long, string, bool)>();
+                    if (lg.TryGetProperty("lines", out var ln) && ln.ValueKind == JsonValueKind.Array) {
+                        foreach (var l in ln.EnumerateArray()) {
+                            if (lines.Count >= MaxLinesPerPush || total >= MaxLinesInPush) break;
+                            if (l.ValueKind != JsonValueKind.Array || l.GetArrayLength() < 2) continue;
+                            if (!l[0].TryGetInt64(out long seq) || l[1].ValueKind != JsonValueKind.String) continue;
+                            string text = l[1].GetString() ?? "";
+                            if (text.Length > LogTail.MaxLineChars) text = text[..LogTail.MaxLineChars];
+                            bool marker = l.GetArrayLength() > 2 && l[2].ValueKind == JsonValueKind.Number && l[2].TryGetInt32(out int mk) && mk == 1;
+                            lines.Add((seq, text, marker));
+                            total++;
+                        }
+                    }
+                    logs.Add(new PushLog(id, epoch, after, lines));
                 }
             }
         } catch {
@@ -491,7 +550,7 @@ public sealed class RelayServer : IDisposable
             // share must not come back; the removal handler takes this same lock after updating the list)
             var cur = _members.Get(m.Id);
             if (cur == null || cur.CodeHash != m.CodeHash) refuse = "\"This invite code is not in the group.\"";
-            else if (_stopped.TryGetValue(m.Id, out var stoppedRun) && stoppedRun == epoch) refuse = "\"stopped\"";
+            else if (_stopped.TryGetValue(m.Id, out var stoppedRun) && stoppedRun == run) refuse = "\"stopped\"";
             else {
                 _stopped.Remove(m.Id);
                 if (!_shares.TryGetValue(m.Id, out share)) _shares[m.Id] = share = new Share(m.Id, m.Name);
@@ -500,31 +559,37 @@ public sealed class RelayServer : IDisposable
             share = refuse.Length == 0 ? _shares[m.Id] : null;
         }
         if (share == null) { Send(stream, refuse.Contains("Too fast") ? 429 : refuse.Contains("stopped") ? 409 : 401, "application/json", refuse); return; }
-        long last;
+        var acks = new StringBuilder();
+        var resync = new List<string>();
         lock (share) {   // one push per member at a time: the epoch / LastSeq bookkeeping and the order of the lines
-            if (share.Epoch != epoch && after >= 0) {
-                Send(stream, 409, "application/json", "{\"resync\":true}");
-                return;
+            lock (_lock) { share.Name = m.Name; share.LastPush = DateTime.UtcNow; share.Port = port; share.Run = run; }
+            foreach (var lg in logs) {
+                var src = share.Get(lg.Id, create: lg.After < 0);
+                if (src == null || (src.Epoch != lg.Epoch && lg.After >= 0)) {
+                    if (src != null || lg.After >= 0) resync.Add(lg.Id);   // we don't have what they think we have
+                    continue;
+                }
+                var batch = new List<LogLine>();
+                if (src.Epoch != lg.Epoch) {
+                    // their app restarted (its numbering starts over): a marker, so a fresh view starts at their new run
+                    if (src.Epoch.Length > 0 && lg.Id == LogSources.Game) batch.Add(new LogLine(0, $"=== {m.Name} started sharing again ===", true));
+                    src.Epoch = lg.Epoch;
+                    src.LastSeq = 0;
+                }
+                long last = src.LastSeq;
+                foreach (var (seq, text, marker) in lg.Lines) {
+                    if (seq <= last) continue;   // already have it (a retried push)
+                    batch.Add(new LogLine(0, text, marker));
+                    last = seq;
+                }
+                src.LastSeq = last;
+                src.Hub.Tail.Append(batch);
+                acks.Append(acks.Length > 0 ? "," : "").Append(JsonSerializer.Serialize(lg.Id, FsperfJson.Default.String)).Append(':').Append(last);
             }
-            lock (_lock) { share.Name = m.Name; share.LastPush = DateTime.UtcNow; share.Port = port; }
-            var batch = new List<LogLine>();
-            if (share.Epoch != epoch) {
-                // their app restarted (its numbering starts over): a marker, so a fresh view starts at their new run
-                if (share.Epoch.Length > 0) batch.Add(new LogLine(0, $"=== {m.Name} started sharing again ===", true));
-                share.Epoch = epoch;
-                share.LastSeq = 0;
-            }
-            last = share.LastSeq;
-            foreach (var (seq, text, marker) in lines) {
-                if (seq <= last) continue;   // already have it (a retried push)
-                batch.Add(new LogLine(0, text, marker));
-                last = seq;
-            }
-            share.LastSeq = last;
-            share.Logs.Tail.Append(batch);
             if (snapshot != null) share.Events.Publish(snapshot);
         }
-        Send(stream, 200, "application/json", $"{{\"name\":{JsonSerializer.Serialize(m.Name, FsperfJson.Default.String)},\"ack\":{last}}}");
+        string rs = string.Join(",", resync.Select(x => JsonSerializer.Serialize(x, FsperfJson.Default.String)));
+        Send(stream, 200, "application/json", $"{{\"name\":{JsonSerializer.Serialize(m.Name, FsperfJson.Default.String)},\"acks\":{{{acks}}},\"resync\":[{rs}]}}");
     }
 
     // ---- viewers: sign in with the invite code, then a session cookie -------------------------------------------------

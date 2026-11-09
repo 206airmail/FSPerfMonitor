@@ -31,6 +31,36 @@ public sealed class MonitorHost : IDisposable
     public string ShareName => _share?.MemberName ?? "";
     private readonly string _shareProblem = "";
 
+    // #15: every log the pages can show (the game's + FSPluginHost's), each followed by its own tail; looked for again
+    // every few seconds (plugin logs appear when the game starts). Tails are never dropped while the monitor runs.
+    private readonly object _logsLock = new();
+    private readonly Dictionary<string, (LogSource Src, LogTail Tail)> _logs = new();
+    private DateTime _logsAt = DateTime.MinValue;
+
+    public LogTail? TailFor(string id) { lock (_logsLock) return _logs.TryGetValue(id, out var l) ? l.Tail : null; }
+
+    public List<(LogSource Src, LogTail Tail)> Logs()
+    {
+        lock (_logsLock) return _logs.Values.OrderBy(l => Order(l.Src.Id)).ThenBy(l => l.Src.Label, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static int Order(string id) => id == LogSources.Game ? 0 : id == "fsp" ? 1 : id == "loader" ? 2 : 3;
+
+    private void RefreshLogs(FspStatusInfo? fsp)
+    {
+        _logsAt = DateTime.UtcNow;
+        List<LogSource> found;
+        try { found = LogSources.Find(_o.ProfileDir, fsp); } catch { return; }
+        lock (_logsLock) {
+            foreach (var src in found) {
+                if (_logs.ContainsKey(src.Id) || _logs.Count >= LogSources.Max) continue;
+                var t = new LogTail(src.Path, ringSize: 3000);
+                _logs[src.Id] = (src, t);
+                t.Start();
+            }
+        }
+    }
+
     // throws when the dashboard port can't be opened (e.g. in use): the caller reports it
     public MonitorHost(Options o, ISettingsBackend? settings = null)
     {
@@ -39,6 +69,7 @@ public sealed class MonitorHost : IDisposable
         try {
             _rec = o.Record != null ? new CsvRecorder(o.Record) : null;
             _tail = new LogTail(Path.Combine(o.ProfileDir, "log.txt"));
+            _logs[LogSources.Game] = (new LogSource(LogSources.Game, LogSources.LabelFor(LogSources.Game), Path.Combine(o.ProfileDir, "log.txt")), _tail);
             _web = new WebServer(o.Port, o.Lan, _tail) { Settings = settings, Host = this };
             _web.Start();
             // the group relay: a busy port must not stop the monitor itself (the Settings page says why)
@@ -49,7 +80,7 @@ public sealed class MonitorHost : IDisposable
             }
             if (!string.IsNullOrEmpty(o.ShareUrl) && !string.IsNullOrEmpty(o.ShareCode)) {
                 var relay = ShareClient.ParseAddress(o.ShareUrl, out string? why);
-                if (relay != null) { _share = new ShareClient(relay, o.ShareCode, _tail, () => _latest, o.Port); }
+                if (relay != null) { _share = new ShareClient(relay, o.ShareCode, Logs, () => _latest, o.Port); }
                 else _shareProblem = why ?? "bad address";
             }
         } catch {
@@ -58,6 +89,7 @@ public sealed class MonitorHost : IDisposable
             throw;
         }
         _tail.Start();
+        RefreshLogs(FspStatus.Read(o.ProfileDir));
         _share?.Start();
     }
 
@@ -78,6 +110,7 @@ public sealed class MonitorHost : IDisposable
                 _latest = s;
                 _web.Publish(JsonSerializer.Serialize(s, FsperfJson.Default.Snapshot));
                 _rec?.Write(s);
+                if ((DateTime.UtcNow - _logsAt).TotalSeconds >= 5) RefreshLogs(s.Fsp);
                 lastError = "";
             } catch (Exception e) {   // one bad sample never ends the monitor (the game comes and goes all day)
                 if (e.Message != lastError) Error?.Invoke($"sample failed ({e.GetType().Name}: {e.Message}); retrying");
@@ -98,7 +131,7 @@ public sealed class MonitorHost : IDisposable
         _share?.Dispose();   // tells the group at once that sharing stopped
         _relay?.Dispose();
         _web.Dispose();
-        _tail.Dispose();
+        lock (_logsLock) foreach (var l in _logs.Values) l.Tail.Dispose();   // the game's tail too
         _rec?.Dispose();
         _col.Dispose();   // stops PresentMon and its SVSPerf_<pid> ETW session
     }

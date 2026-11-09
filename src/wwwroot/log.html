@@ -8,7 +8,8 @@
 <body class="log-page" data-page="log"><a class="skip" href="#main">Skip to content</a>
 <header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a id="nav-group" hidden>Group</a><a href="./">Dashboard</a><a href="log" aria-current="page">Game log</a><a href="/settings">Settings</a></nav></div></header>
 <main id="main" class="wrap"><div class="page-title"><h1>Game log</h1><span class="status" id="log-status" role="status"></span></div>
-<div class="log-tools"><label for="filter" class="small">Find text in the log</label><input id="filter" type="search" placeholder="Filter lines…" autocomplete="off" autocapitalize="off" spellcheck="false">
+<div class="log-tools"><div class="field" id="src-field" hidden><label for="src" class="small">Log</label><select id="src" aria-describedby="src-help"></select><span id="src-help" class="meta">The game’s log, or FSPluginHost’s and its plugins’ logs.</span></div>
+<label for="filter" class="small">Find text in the log</label><input id="filter" type="search" placeholder="Filter lines…" autocomplete="off" autocapitalize="off" spellcheck="false">
 <div class="row between"><div class="filters"><button id="bErr" aria-pressed="false">Errors</button><button id="bWarn" aria-pressed="false">Warnings</button><button id="bFail" aria-pressed="false">FAIL</button></div><div class="actions"><button id="pause" aria-pressed="false">Pause</button><button id="clear">Clear</button><a class="button" id="download" href="log/download" download title="Save the lines kept for this log as a text file">Download</a></div></div>
 <p class="meta">Selected levels are combined. Text ignores letter case. Clear affects this view only.</p></div>
 <div class="log-viewport" id="log" role="region" aria-label="Game log lines" tabindex="0"></div>
@@ -27,6 +28,9 @@ if (document.documentElement.dataset.relay !== "1") fetch("/api/settings", { cac
   } catch { }
 }).catch(() => { });
 const KEEP = 10000, DOMCAP = 3000, PARAM_N = 500;
+// #15: which log (game, FSPluginHost, a plugin): ?src= in this page's address, so a reload or a shared link keeps it
+let src = new URLSearchParams(location.search).get("src") || "game";
+function srcQuery() { return src === "game" ? "" : "&src=" + encodeURIComponent(src); }
 const logEl = $("log");
 let model = [];            // {seq, text, cls}; the last KEEP lines received
 let held = [];             // lines that arrived while paused
@@ -139,7 +143,7 @@ let es = null, retry = null;
 function connect() {
   clearTimeout(retry);
   if (es) { es.close(); es = null; }
-  es = new EventSource("log/stream?n=" + PARAM_N + (lastId ? "&after=" + encodeURIComponent(lastId) : ""));
+  es = new EventSource("log/stream?n=" + PARAM_N + srcQuery() + (lastId ? "&after=" + encodeURIComponent(lastId) : ""));
   es.onopen = () => { connected = true; setStatus(); };
   es.onmessage = e => {
     connected = true;
@@ -172,6 +176,35 @@ $("pause").onclick = () => {
 $("clear").onclick = () => { model = []; held = []; rebuild(); };   // view only: the log file and the server are untouched
 window.addEventListener("resize", () => { if (stick) toBottom(); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden && !es) connect(); });
+// the logs there are (relative: the group relay serves this page at /s/<id>/log); the picker shows when there is more than one
+function setDownload() { $("download").href = "log/download" + (src === "game" ? "" : "?src=" + encodeURIComponent(src)); }
+function switchTo(id) {
+  src = id;
+  const u = new URL(location.href);
+  if (id === "game") u.searchParams.delete("src"); else u.searchParams.set("src", id);
+  history.replaceState(null, "", u);
+  const opt = [...$("src").options].find(o => o.value === id);
+  document.querySelector("h1").textContent = opt ? opt.textContent : "Game log";
+  $("log").setAttribute("aria-label", (opt ? opt.textContent : "Game log") + " lines");
+  model = []; held = []; epoch = ""; lastSeq = 0; lastId = ""; stick = true;
+  setDownload(); rebuild(); connect();
+}
+async function loadSources() {
+  try {
+    const list = await (await fetch("api/logs", { cache: "no-store" })).json();
+    const sel = $("src"), had = sel.value;
+    sel.textContent = "";
+    for (const l of list) { const o = document.createElement("option"); o.value = l.id; o.textContent = l.label; sel.append(o); }
+    if (!list.some(l => l.id === src)) { const o = document.createElement("option"); o.value = src; o.textContent = src; sel.append(o); }
+    sel.value = src;
+    $("src-field").hidden = list.length < 2 && src === "game";
+    if (!had) { const opt = [...sel.options].find(o => o.value === src); if (opt) document.querySelector("h1").textContent = opt.textContent; }
+  } catch { }
+}
+$("src").onchange = e => switchTo(e.target.value);
+setInterval(loadSources, 15000);   // plugin logs appear when the game starts
+setDownload();
+loadSources();
 rebuild();
 connect();
 </script>

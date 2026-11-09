@@ -339,6 +339,14 @@ $members = Join-Path $gdir 'members.json'
 $gprof = Join-Path $gdir 'profile'; New-Item -ItemType Directory $gprof | Out-Null
 $docs = [Environment]::GetFolderPath('MyDocuments')
 [IO.File]::WriteAllText((Join-Path $gprof 'log.txt'), "group first line`nLoading $docs\My Games\mods\x.zip`nfrom C:\Users\$env:USERNAME\AppData\y on $env:COMPUTERNAME`nE:/Users/Jane Doe/z.txt`n<script>alert(1)</script>`n")
+# #15: FSPluginHost's logs (docs/ABI.md "Runtime files"); a plugin with a path-like name must never become a path
+$gfsp = Join-Path $gprof 'fsp'
+New-Item -ItemType Directory (Join-Path $gfsp 'T3D') | Out-Null
+[IO.File]::WriteAllText((Join-Path $gfsp 'fsp.status.xml'), '<fsp version="0.13" channel="test" build="1"><plugin name="T3D" version="1" state="active"/><plugin name="..\..\evil" version="1" state="active"/></fsp>')
+[IO.File]::WriteAllText((Join-Path $gfsp 'fsp.log'), "host line one`n")
+[IO.File]::WriteAllText((Join-Path $gfsp 'fs25plugins.log'), "loader line one`n")
+[IO.File]::WriteAllText((Join-Path $gfsp 'T3D\T3D.log'), "t3d line from C:\Users\$env:USERNAME\Documents`n")
+[IO.File]::WriteAllText((Join-Path $gdir 'evil.log'), "must never be served`n")
 $add = (& $exe --group-add 'Tester One' --group-members $members) -split ' '
 $gid = $add[0]; $gcode = $add[-1]
 Check ($LASTEXITCODE -eq 0 -and $gcode -match '^([A-Z2-9]{4}-){5}[A-Z2-9]{4}$') "group: --group-add prints an invite code ($gid)"
@@ -386,22 +394,37 @@ try {
     Check ((GReq GET "/s/$gid/log/download").code -eq '401') "group: downloading needs a sign-in"
     $ldl = (curl.exe -s -D - http://127.0.0.1:8795/log/download) -join "`n"
     Check ($ldl -match 'attachment; filename="game-log-' -and $ldl -match 'group first line') "the local log page downloads too"
+    # #15: FSPluginHost's logs, on this PC and through the group
+    $ll = (curl.exe -s http://127.0.0.1:8795/api/logs) | ConvertFrom-Json
+    Check ((($ll | ForEach-Object id) -join ',') -eq 'game,fsp,loader,plugin:T3D') "plugin logs: this PC lists game, host, loader and T3D, never a path-like plugin name ($((($ll | ForEach-Object id) -join ',')))"
+    $t3 = (curl.exe -sN --max-time 2 'http://127.0.0.1:8795/log/stream?n=50&src=plugin:T3D') -join "`n"
+    Check ($t3 -match 't3d line') "plugin logs: a plugin's log streams on this PC (?src=plugin:T3D)"
+    $bad = curl.exe -s -o NUL -w '%{http_code}' --max-time 2 'http://127.0.0.1:8795/log/stream?src=plugin:..%5C..%5Cevil'
+    Check ($bad -eq '404') "plugin logs: a path-like source is refused ($bad)"
+    $gl = ((GReq GET "/s/$gid/api/logs" $null @($gcookie)).body | ConvertFrom-Json)
+    Check ((($gl | ForEach-Object id) -join ',') -eq 'game,fsp,loader,plugin:T3D') "plugin logs: the group lists the member's logs ($((($gl | ForEach-Object id) -join ',')))"
+    $gt3 = (curl.exe -sN --max-time 2 -H $gcookie "$gbase/s/$gid/log/stream?n=50&src=plugin:T3D") -join "`n"
+    Check ($gt3 -match 't3d line' -and $gt3 -notmatch [regex]::Escape($env:USERNAME)) "plugin logs: a member's plugin log arrives through the group, cleaned"
+    $gfd = GReq GET "/s/$gid/log/download?src=fsp" $null @($gcookie)
+    Check ($gfd.code -eq '200' -and $gfd.headers -match 'filename="Tester_One-FSPluginHost-log-' -and $gfd.body -match 'host line one') "plugin logs: a member's FSPluginHost log downloads"
     $gev = (curl.exe -sN --max-time 3 -H $gcookie "$gbase/s/$gid/events") -join "`n"
     Check ($gev -match '^data: \{"time"' -or $gev -match '(?m)^data: \{"time"') "group: the member's live numbers arrive"
     Check ((GReq POST '/api/push' '{"epoch":"x","lines":[]}' @('Authorization: Bearer AAAA-BBBB-CCCC-DDDD-EEEE-FFFF')).code -eq '401') "group: a push with an unknown code -> 401"
     Check ((curl.exe -s -o NUL -w '%{http_code}' -m 5 -X POST -H 'Content-Type: application/json' -H 'Content-Length: 900000' --data-binary '{}' "$gbase/api/push") -match '413|400') "group: an oversized push is refused"
     Check ((GReq POST '/api/stop' '{}' @("Authorization: Bearer $gcode")).code -eq '200' -and @(((GReq GET '/api/group' $null @($gcookie)).body | ConvertFrom-Json).sharing).Count -le 1) "group: stop sharing is accepted"
-    $rs = GReq POST '/api/push' '{"epoch":"newrun01","after":5,"lines":[]}' @("Authorization: Bearer $gcode")
-    Check ($rs.code -eq '409' -and $rs.body -match 'resync') "group: a run the relay doesn't know asks for the history again (resync)"
-    Check ((GReq POST '/api/stop' '{"epoch":"newrun01"}' @("Authorization: Bearer $gcode")).code -eq '200') "group: stop names its run"
+    $rs = GReq POST '/api/push' '{"run":"testrun01","logs":[{"id":"game","epoch":"newrun01","after":5,"lines":[]}]}' @("Authorization: Bearer $gcode")
+    Check ($rs.code -eq '200' -and $rs.body -match '"resync":\["game"\]') "group: a log the relay doesn't know asks for its history again (resync)"
+    Check ((GReq POST '/api/stop' '{"run":"testrun01"}' @("Authorization: Bearer $gcode")).code -eq '200') "group: stop names its run"
     Start-Sleep -Milliseconds 600
-    $late = GReq POST '/api/push' '{"epoch":"newrun01","after":-1,"lines":[[1,"late",0]]}' @("Authorization: Bearer $gcode")
+    $late = GReq POST '/api/push' '{"run":"testrun01","logs":[{"id":"game","epoch":"newrun01","after":-1,"lines":[[1,"late",0]]}]}' @("Authorization: Bearer $gcode")
     Check ($late.code -eq '409' -and $late.body -match 'stopped') "group: a late push of a stopped run is refused"
     # the real sharer comes back by itself (its own run: the relay asks it to resync, then accepts it)
     $back = $false
     for ($i = 0; $i -lt 30 -and -not $back; $i++) { Start-Sleep -Milliseconds 300; $back = @(((GReq GET '/api/group' $null @($gcookie)).body | ConvertFrom-Json).sharing).Count -eq 1 }
     Check $back "group: the sharer resumes after the relay forgot its run"
-    $hist = (curl.exe -sN --max-time 2 -H $gcookie "$gbase/s/$gid/log/stream?n=50") -join "`n"
+    # (the list shows them from their first push; the history follows with the next one, ~0.6 s later)
+    $hist = ''
+    for ($i = 0; $i -lt 6 -and $hist -notmatch 'group first line'; $i++) { Start-Sleep -Milliseconds 500; $hist = (curl.exe -sN --max-time 2 -H $gcookie "$gbase/s/$gid/log/stream?n=50") -join "`n" }
     Check ($hist -match 'group first line') "group: ...and resends its history (nothing it still has is skipped)"
     # a removed member's open live views are closed at once (here: their view of their own log)
     $vjob = Start-Job { param($ck, $u) $sw = [Diagnostics.Stopwatch]::StartNew(); curl.exe -sN --max-time 10 -H $ck $u | Out-Null; $sw.ElapsedMilliseconds } -ArgumentList $gcookie, "$gbase/s/$gid/log/stream?n=1"

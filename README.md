@@ -93,6 +93,22 @@ Friends share their live dashboard and game log with a group; every member can w
   (or giving them a new code) ends their sign-in at once. `/s/<id>/` and `/s/<id>/log` are the
   usual dashboard and log pages for that member, fed by `/s/<id>/events` and `/s/<id>/log/stream`.
 
+## FSPluginHost logs (0.6, #15)
+
+The log page has a picker: the game's log, FSPluginHost (`<profile>\fsp\fsp.log`), the plugin loader
+(`fsp\fs25plugins.log`) and each plugin (`fsp\<Name>\<Name>.log`), from FSPluginHost's documented runtime files
+(docs/ABI.md). Plugin names come from `fsp.status.xml` and must be plain names (letters, digits, `_ - .`); nothing else
+is ever opened. `GET /api/logs` lists them; `/log/stream?src=<id>` and `/log/download?src=<id>` (`game`, `fsp`,
+`loader`, `plugin:<Name>`). Each is followed like the game log (last 1 MB first; 3,000 lines kept per plugin log).
+Sharing sends all of them, cleaned the same way; the relay keeps 10,000 lines of the game log and 3,000 per other log.
+
+## Dedicated server (0.6, #17)
+
+A dedicated server is `FarmingSimulator2025Game.exe` started with `-server` / `-serverWithGui` (by the web admin,
+`dedicatedServer.exe`). It is recognised from the game's command line (`--server-mode on|off` overrides): no frame
+capture, and the verdict comes from the main thread, which runs the whole simulation (keeps up < 70% <= busy < 90% <=
+at its limit).
+
 ## Full mode (0.2): per-frame CPU and GPU time
 
 When the monitor may read Windows' presentation events, it starts Intel's PresentMon console (MIT, signed by Intel; found

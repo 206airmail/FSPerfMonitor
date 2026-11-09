@@ -59,6 +59,7 @@ const verdictCopy = {
   // a dedicated server (#17): the simulation runs on its main thread; there is no picture, so no FPS
   "server-ok": ["The server keeps up", "The server’s main thread has time to spare. Players should not notice any lag from the server."],
   "server-busy": ["The server is busy", "The server’s main thread is working hard. More vehicles, workers or players may start to cause lag."],
+  "server-unknown": ["Waiting for server readings", "The server’s main thread readings will appear in a moment. If they don’t, run SVS Performance Monitor with full permissions."],
   "server-limit": ["The server is at its limit", "The server’s main thread can’t keep up. Players will notice lag and vehicles jumping. Fewer workers, vehicles or mods help."],
 };
 const banners = {

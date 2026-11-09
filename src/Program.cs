@@ -36,6 +36,7 @@ public sealed class Options
     public string? GroupMembers;                 // its members file (default next to the settings; the self-test uses its own)
     public string? ShareUrl;                     // #14: share with the group relay at this address
     public string? ShareCode;                    //      using this invite code
+    public string ServerMode = "auto";           // #17: auto (from the game's command line) | on | off
 
     // the command line, on top of `start` (the tray app's settings) or the defaults
     public static Options Parse(string[] a, Options? start = null)
@@ -67,6 +68,11 @@ public sealed class Options
                 case "--group-members": o.GroupMembers = Next(); break;
                 case "--share": o.ShareUrl = Next(); break;
                 case "--share-code": o.ShareCode = Next(); break;
+                case "--server-mode": {
+                    string m = Next();
+                    o.ServerMode = m is "on" or "off" or "auto" ? m : throw new ArgumentException("--server-mode takes auto, on or off");
+                    break;
+                }
                 default: throw new ArgumentException($"unknown option {a[i]}");
             }
         }
@@ -89,6 +95,7 @@ public static class Program
 
           options: --port <n>  --lan  --interval-ms <ms>  --sample-hz <hz> (main-loop breakdown, 0 = off)
                    --pid <n>  --profile <folder>  --seconds <n>  --presentmon <exe>  --no-frames  --tray
+                   --server-mode auto|on|off (a dedicated server: found from the game's -server, or forced)
                    group: --group-port <n> (host a group relay on this PC, behind an HTTPS web server)
                           --share <address> --share-code <invite code> (share with a group)
                           --group-add <name> / --group-list / --group-remove <id> (manage the members)

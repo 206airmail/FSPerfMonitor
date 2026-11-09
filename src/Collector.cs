@@ -27,6 +27,7 @@ public sealed class Collector : IDisposable
     private IntPtr _procHandle;
     private int _mainTid;
     private bool _server;   // the attached game is a dedicated server (its command line has -server / -serverWithGui)
+    private bool _cmdUnknown;   // its command line could not be read (another user / elevated): detection is off
     private DateTime _lastModules = DateTime.MinValue;
     private TimeSpan _lastProcCpu;
     private DateTime _lastTick;
@@ -63,7 +64,10 @@ public sealed class Collector : IDisposable
         _modules.Refresh(_procHandle, Path.GetFileName(SafeMainModule(_proc)));
         _lastModules = DateTime.UtcNow;
         if (_mainTid != 0) _sampler.Start((uint)_mainTid);
-        _server = IsServerCommandLine(Native.CommandLine(_procHandle));
+        // --server-mode on|off overrides the detection (e.g. a server whose command line can't be read)
+        string? cmd = _o.ServerMode == "auto" ? Native.CommandLine(_procHandle) : null;
+        _cmdUnknown = _o.ServerMode == "auto" && cmd == null;
+        _server = _o.ServerMode == "on" || (_o.ServerMode == "auto" && IsServerCommandLine(cmd));
         _lastProcCpu = SafeCpu(_proc);
         _lastTick = DateTime.UtcNow;
         _lastThreadCpu.Clear();
@@ -89,15 +93,17 @@ public sealed class Collector : IDisposable
         _proc = null;
         _mainTid = 0;
         _server = false;
+        _cmdUnknown = false;
     }
 
-    // the game's own test (dataS/scripts/main.lua: StartParams.getIsSet("server") or "serverWithGui"): a whole argument,
-    // any case; a quoted path that merely contains "-server" doesn't count
+    // the game's own test (dataS/scripts/main.lua: StartParams.getIsSet("server") or "serverWithGui"): one whole
+    // argument after the program, any case, split the way Windows splits command lines (so "-server" inside a quoted
+    // path is no server, and a quoted "-server" is)
     public static bool IsServerCommandLine(string? cmd)
     {
         if (string.IsNullOrEmpty(cmd)) return false;
-        return System.Text.RegularExpressions.Regex.IsMatch(cmd, @"(^|\s)-(server|serverWithGui)(?=\s|$)",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        return Native.SplitArgs(cmd).Skip(1).Any(a =>
+            a.Equals("-server", StringComparison.OrdinalIgnoreCase) || a.Equals("-serverWithGui", StringComparison.OrdinalIgnoreCase));
     }
 
     private Snapshot Waiting(FspStatusInfo fsp, string why) =>
@@ -143,6 +149,7 @@ public sealed class Collector : IDisposable
         // per-thread busy % (of one core) from kernel + user time deltas
         var loads = new List<ThreadLoad>();
         double mainBusy = 0;
+        bool mainSeen = false;   // a real main-thread reading this tick (thread times may be denied)
         try {
             foreach (ProcessThread t in p.Threads) {
                 long total;
@@ -150,7 +157,7 @@ public sealed class Collector : IDisposable
                 if (_lastThreadCpu.TryGetValue(t.Id, out long before)) {
                     double pct = Math.Min(100, 100.0 * (total - before) / 1e7 / wall);
                     loads.Add(new ThreadLoad(t.Id, pct, t.Id == _mainTid));
-                    if (t.Id == _mainTid) mainBusy = pct;
+                    if (t.Id == _mainTid) { mainBusy = pct; mainSeen = true; }
                 }
                 _lastThreadCpu[t.Id] = total;
             }
@@ -169,8 +176,11 @@ public sealed class Collector : IDisposable
         if (!_server) _frames?.Ensure(p.Id);
         var frames = _server ? null : _frames?.TakeWindow(wall);
         bool full = frames != null && frames.State == "running" && frames.Frames > 0;
-        var verdict = _server ? JudgeServer(mainBusy) : (full ? FrameMonitor.Judge(frames!) : null) ?? Judge(mainBusy, gpu3d);
+        var verdict = _server ? (mainSeen ? JudgeServer(mainBusy) : new Verdict("server-unknown", "no main-thread reading yet"))
+            : (full ? FrameMonitor.Judge(frames!) : null) ?? Judge(mainBusy, gpu3d);
         string note = _sampler.Hz == 0 || _sampler.Running ? "" : "main-thread sampler not running (thread access denied?)";
+        if (_cmdUnknown) note = (note.Length > 0 ? note + "; " : "") +
+            "the game's command line can't be read (it runs as another user or with full permissions), so a dedicated server isn't recognised: run SVS Performance Monitor with full permissions, or start it with --server-mode on";
         return new Snapshot(DateTime.Now, full ? "full" : "basic", true, p.Id, p.ProcessName, procPct, Environment.ProcessorCount, mainBusy, top, gpu3d,
             vram, ws, priv, shares, samples, fsp, verdict, note, frames, _elevated, _sampler.Hz, _server);
     }

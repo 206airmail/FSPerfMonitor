@@ -37,6 +37,7 @@ function notice(title, text) {
 
 function signedOut() {
   $("signin").hidden = false; $("group").hidden = true; $("me").hidden = true;
+  $("my-settings").hidden = true; $("my-settings").removeAttribute("href");
   if (timer) { clearInterval(timer); timer = null; }
 }
 

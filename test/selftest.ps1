@@ -321,7 +321,8 @@ try {
 
 # 0.6 dedicated server (#17): the game with -server is a server: no frame capture, a main-thread verdict
 foreach ($c in @(@('"C:\Games\FS25\FarmingSimulator2025Game.exe" -server -autoStartSavegameId 1', 'server'), @('game.exe -serverWithGui', 'server'),
-                 @('"D:\my-server stuff\game.exe" -name x', 'game'), @('game.exe -servers', 'game'), @('game.exe', 'game'))) {
+                 @('"D:\my-server stuff\game.exe" -name x', 'game'), @('game.exe -servers', 'game'), @('game.exe', 'game'),
+                 @('game.exe -log "D:\logs\ -server capture\out.txt"', 'game'), @('game.exe "-server"', 'server'), @('C:\x\-server', 'game'))) {
     $got = (& { $ErrorActionPreference = 'Continue'; $c[0] | & $exe --is-server-cmdline 2>$null }) -join ''
     Check ($got -eq $c[1]) "server detection: [$($c[0])] -> $got (want $($c[1]))"
 }

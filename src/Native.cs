@@ -37,6 +37,23 @@ internal static unsafe class Native
     [StructLayout(LayoutKind.Sequential)]
     private struct UNICODE_STRING { public ushort Length, MaximumLength; public IntPtr Buffer; }
 
+    // a command line split exactly as Windows splits it (quotes, backslashes); argv[0] is the program
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr CommandLineToArgvW(string cmd, out int count);
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr LocalFree(IntPtr mem);
+
+    public static List<string> SplitArgs(string cmd)
+    {
+        var list = new List<string>();
+        if (string.IsNullOrWhiteSpace(cmd)) return list;
+        IntPtr argv = CommandLineToArgvW(cmd, out int n);
+        if (argv == IntPtr.Zero) return list;
+        try { for (int i = 0; i < n; i++) list.Add(Marshal.PtrToStringUni(Marshal.ReadIntPtr(argv, i * IntPtr.Size)) ?? ""); }
+        finally { LocalFree(argv); }
+        return list;
+    }
+
     public static string? CommandLine(IntPtr process)
     {
         if (process == IntPtr.Zero) return null;

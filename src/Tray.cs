@@ -471,6 +471,7 @@ public static unsafe class TrayApp
             "server-ok" => "The server keeps up",
             "server-busy" => "The server is busy",
             "server-limit" => "The server is at its limit",
+            "server-unknown" => "Waiting for server readings",
             _ => "Watching the game",
         };
         if (s.Server) what += $" · main thread {s.MainThreadBusyPct:0}%";

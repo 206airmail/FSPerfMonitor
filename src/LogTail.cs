@@ -62,9 +62,7 @@ public sealed class LogTail : IDisposable
     private void Tick()
     {
         try { Poll(); } catch { }
-        if (++_ticks % (15000 / _pollMs + 1) == 0) {
-            lock (_gate) { try { Heartbeat?.Invoke(); } catch { } }
-        }
+        if (++_ticks % (15000 / _pollMs + 1) == 0) Beat();
     }
 
     public long LastSeq { get { lock (_gate) return _next - 1; } }
@@ -98,18 +96,31 @@ public sealed class LogTail : IDisposable
             var batch = new List<LogLine>();
             ReadNew(batch);
             if (batch.Count == 0) return false;
-            lock (_gate) {
-                for (int i = 0; i < batch.Count; i++) {
-                    var l = batch[i] with { Seq = _next++ };
-                    batch[i] = l;
-                    _ring[l.Seq % _ring.Length] = l;
-                    if (l.Marker) _lastMarker = l.Seq;
-                }
-                try { Appended?.Invoke(batch); } catch { }
-            }
+            Append(batch);
             return true;
         } finally { Volatile.Write(ref _busy, 0); }
     }
+
+    // a ring fed by someone else instead of a file (#14: a group member's shared log on the relay): never Start()ed; lines
+    // come in through Append, the keep-alive through Beat
+    public static LogTail Detached(int ringSize) => new("", ringSize);
+
+    // numbers the lines (their Seq is replaced), keeps them and tells the viewers
+    public void Append(List<LogLine> batch)
+    {
+        if (batch.Count == 0) return;
+        lock (_gate) {
+            for (int i = 0; i < batch.Count; i++) {
+                var l = batch[i] with { Seq = _next++ };
+                batch[i] = l;
+                _ring[l.Seq % _ring.Length] = l;
+                if (l.Marker) _lastMarker = l.Seq;
+            }
+            try { Appended?.Invoke(batch); } catch { }
+        }
+    }
+
+    public void Beat() { lock (_gate) { try { Heartbeat?.Invoke(); } catch { } } }
 
     private void ReadNew(List<LogLine> outLines)
     {

@@ -5,3 +5,4 @@ publish/
 tools/PresentMon-*.exe
 publish_test/
 dist/
+.playwright-mcp/

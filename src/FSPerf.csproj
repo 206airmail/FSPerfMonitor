@@ -13,7 +13,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>SVSPerfMonitor</AssemblyName>
     <RootNamespace>FSPerf</RootNamespace>
-    <Version>0.5.0</Version>
+    <Version>0.6.0</Version>
     <Product>SVS Performance Monitor</Product>
     <AssemblyTitle>SVS Performance Monitor</AssemblyTitle>
     <Company>SimVizion Studios</Company>
@@ -28,6 +28,7 @@
     <EmbeddedResource Include="wwwroot\log.html" LogicalName="log.html" />
     <EmbeddedResource Include="wwwroot\settings.html" LogicalName="settings.html" />
     <EmbeddedResource Include="wwwroot\welcome.html" LogicalName="welcome.html" />
+    <EmbeddedResource Include="wwwroot\group.html" LogicalName="group.html" />
     <EmbeddedResource Include="wwwroot\assets\styles.css" LogicalName="styles.css" />
     <EmbeddedResource Include="wwwroot\assets\tokens.css" LogicalName="tokens.css" />
     <EmbeddedResource Include="wwwroot\brand\logo-64.png" LogicalName="logo-64.png" />

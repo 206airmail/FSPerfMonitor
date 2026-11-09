@@ -66,6 +66,33 @@ only). The page keeps the last 10,000 lines and shows at most 3,000 at a time.
 - **Privacy:** the view shows the whole `log.txt` (file paths, mod names, user names in paths) to everyone who can reach
   the dashboard. With `--lan` that is everyone on your private network. It is read-only.
 
+## Group sharing (0.6, #14)
+
+Friends share their live dashboard and game log with a group; every member can watch everyone who is sharing.
+
+- **Relay** (`--group-port 8766`, or Settings "Host a group on this PC"): listens on **127.0.0.1 only** and is published by
+  an HTTPS web server in front (Caddy: `perf.example.com:9443 { reverse_proxy 127.0.0.1:8766 }`). Every request on the
+  relay port counts as coming from the internet (the front connects from loopback too). Nothing shared is written to
+  disk: the last 10,000 lines and the newest numbers per sharer live in memory and go when sharing stops (or after 10
+  quiet minutes).
+- **Members:** `relay-members.json` next to the settings holds names and SHA-256 hashes of the invite codes (24 random
+  characters, ~119 bits; shown once). Managed on the host's Settings page (this PC only, the same token/Origin locks as
+  saving settings) or `--group-add <name>` / `--group-list` / `--group-remove <id>` (picked up by a running relay).
+  Removing a member ends their sessions and their sharing at once.
+- **Sharing** (`--share <address> --share-code <code>`, or Settings "Share with a group"): only connects out, HTTPS only
+  (plain HTTP only to this PC). Every 2 s: `POST /api/push` with `Authorization: Bearer <code>` and
+  `{"epoch","snapshot","lines":[[seq,text,marker]]}`; the relay answers `{"name","ack"}` and the next push sends what
+  comes after `ack` (nothing lost or doubled on a failed send). Exit/stop sends `POST /api/stop`.
+- **Privacy:** before anything leaves the PC, the user's own folders (Documents, Desktop, AppData, profile, OneDrive)
+  become `[Documents]` etc., any `X:\Users\<name>` becomes `X:\Users\user`, and the Windows user name and computer
+  name (5+ characters) are replaced as whole words. The relay re-reads every snapshot as the dashboard's typed data
+  (numbers stay numbers) before showing it.
+- **Viewers:** `/` signs in with the invite code (`POST /api/signin`, same-site Origin only; 10 failed tries per address
+  per 10 minutes) and sets a 30-day `HttpOnly; Secure; SameSite=Strict` cookie: `<member id>.<expiry>.<HMAC>` with the
+  group's key (`relay-key.bin` next to the members file), so a relay restart signs nobody out, while removing a member
+  (or giving them a new code) ends their sign-in at once. `/s/<id>/` and `/s/<id>/log` are the
+  usual dashboard and log pages for that member, fed by `/s/<id>/events` and `/s/<id>/log/stream`.
+
 ## Full mode (0.2): per-frame CPU and GPU time
 
 When the monitor may read Windows' presentation events, it starts Intel's PresentMon console (MIT, signed by Intel; found

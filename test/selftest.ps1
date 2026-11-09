@@ -254,7 +254,7 @@ try {
     Start-Sleep -Milliseconds 1200
     $page = (curl.exe -s http://127.0.0.1:8799/log) -join "`n"
     Check ($page -match 'Game log</title>' -and $page -match 'href="/"') "GET /log serves the log page (links back to the dashboard)"
-    Check (((curl.exe -s http://127.0.0.1:8799/) -join "`n") -match 'href="/log"') "the dashboard links to /log"
+    Check (((curl.exe -s http://127.0.0.1:8799/) -join "`n") -match 'href="log"') "the dashboard links to the log (relative: the group relay serves it under /s/<id>/)"
     $first = (curl.exe -siN --max-time 2 'http://127.0.0.1:8799/log/stream?n=10') -join "`n"
     Check ($first -match 'text/event-stream' -and $first -match '"reset":true' -and $first -match 'first line' -and $first -match 'Warning: something odd') "stream: a new client gets the recent lines first"
     $lastId = ([regex]::Matches($first, '(?m)^id: (\S+)') | Select-Object -Last 1).Groups[1].Value
@@ -317,6 +317,92 @@ try {
 } finally {
     if (-not $srv.HasExited) { Stop-Process -Id $srv.Id -ErrorAction SilentlyContinue }
     Remove-Item $prof -Recurse -ErrorAction SilentlyContinue
+}
+
+# 0.6 group relay (#14): a relay on 127.0.0.1:8796 and a copy sharing a temp log with it, on this PC only
+$gdir = Join-Path $env:TEMP ('svsperf_selftest_group_' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+New-Item -ItemType Directory $gdir | Out-Null
+$members = Join-Path $gdir 'members.json'
+$gprof = Join-Path $gdir 'profile'; New-Item -ItemType Directory $gprof | Out-Null
+$docs = [Environment]::GetFolderPath('MyDocuments')
+[IO.File]::WriteAllText((Join-Path $gprof 'log.txt'), "group first line`nLoading $docs\My Games\mods\x.zip`nfrom C:\Users\$env:USERNAME\AppData\y on $env:COMPUTERNAME`nE:/Users/Jane Doe/z.txt`n<script>alert(1)</script>`n")
+$add = (& $exe --group-add 'Tester One' --group-members $members) -split ' '
+$gid = $add[0]; $gcode = $add[-1]
+Check ($LASTEXITCODE -eq 0 -and $gcode -match '^([A-Z2-9]{4}-){5}[A-Z2-9]{4}$') "group: --group-add prints an invite code ($gid)"
+$dup = & { $ErrorActionPreference = 'Continue'; (& $exe --group-add 'tester one' --group-members $members 2>&1 | ForEach-Object { "$_" }) -join ' ' }
+Check ($dup -match 'already has that name') "group: names are unique (any case)"
+Check ((Get-Content $members -Raw) -notmatch [regex]::Escape($gcode) -and (Get-Content $members -Raw) -match '"codeHash"') "group: the members file keeps only a hash of the code"
+$gbase = 'http://127.0.0.1:8796'
+$ghdr = Join-Path $gdir 'h.txt'; $gbody = Join-Path $gdir 'b.json'
+function GReq([string]$method, [string]$path, [string]$body, [string[]]$headers) {
+    $a = @('-s', '-X', $method, '-D', $ghdr, '-w', '%{http_code}', '-m', '5')
+    if ($null -ne $body -and $body.Length -gt 0) { [IO.File]::WriteAllText($gbody, $body); $a += @('-H', 'Content-Type: application/json', '--data-binary', "@$gbody") }
+    foreach ($h in $headers) { $a += @('-H', $h) }
+    $out = (& curl.exe @a "$gbase$path") -join "`n"
+    return @{ code = $out.Substring($out.Length - 3); body = $out.Substring(0, $out.Length - 3); headers = (Get-Content $ghdr -Raw) }
+}
+$grelay = Start-Process $exe -ArgumentList '--no-browser', '--no-frames', '--seconds', '60', '--port', '8797', '--group-port', '8796', '--group-members', "`"$members`"" -PassThru -WindowStyle Hidden
+$gshare = Start-Process $exe -ArgumentList '--no-browser', '--no-frames', '--seconds', '60', '--port', '8795', '--profile', "`"$gprof`"", '--share', 'http://127.0.0.1:8796', '--share-code', $gcode -PassThru -WindowStyle Hidden
+try {
+    Start-Sleep -Milliseconds 4500
+    $listen = @(Get-NetTCPConnection -State Listen -LocalPort 8796 -ErrorAction SilentlyContinue | ForEach-Object LocalAddress)
+    Check ($listen.Count -gt 0 -and -not ($listen | Where-Object { $_ -ne '127.0.0.1' })) "group: the relay listens on 127.0.0.1 only ($($listen -join ', '))"
+    Check ((GReq GET '/api/group').code -eq '401') "group: the list needs a sign-in"
+    Check ((GReq POST '/api/signin' ('{"code":"' + $gcode + '"}')).code -eq '403') "group: sign-in without this site's Origin -> 403"
+    Check ((GReq POST '/api/signin' '{"code":"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF"}' @("Origin: $gbase")).code -eq '401') "group: a wrong code -> 401"
+    $si = GReq POST '/api/signin' ('{"code":"' + $gcode.ToLower().Replace('-', ' ') + '"}') @("Origin: $gbase")
+    $setc = ($si.headers -split "`r?`n" | Where-Object { $_ -like 'Set-Cookie:*' }) -join ''
+    Check ($si.code -eq '200' -and $setc -match 'HttpOnly' -and $setc -match 'Secure' -and $setc -match 'SameSite=Strict') "group: the code signs in (any case, spaces) with a HttpOnly Secure SameSite cookie"
+    $gcookie = 'Cookie: ' + (($setc -replace '^Set-Cookie: ', '') -split ';')[0]
+    $grp = GReq GET '/api/group' $null @($gcookie)
+    $gj = $grp.body | ConvertFrom-Json
+    Check ($grp.code -eq '200' -and $gj.me -eq 'Tester One' -and @($gj.sharing).Count -eq 1 -and $gj.sharing[0].id -eq $gid) "group: the sharer is listed"
+    $dash = GReq GET "/s/$gid/" $null @($gcookie)
+    Check ($dash.code -eq '200' -and $dash.body -match 'data-relay="1"' -and $dash.body -notmatch 'href="/settings"' -and $dash.body -match 'Tester One') "group: the member's dashboard (their name, no Settings)"
+    Check ((GReq GET "/s/$gid/log/stream").code -eq '401') "group: a member's live log needs a sign-in"
+    $glog = (curl.exe -sN --max-time 2 -H $gcookie "$gbase/s/$gid/log/stream?n=50") -join "`n"
+    Check ($glog -match 'group first line' -and $glog -match 'alert\(1\)') "group: the shared log arrives through the relay"
+    $leak = @($env:USERNAME, $env:COMPUTERNAME, 'Jane Doe') + @(($docs -split '[\\/]') | Where-Object { $_.Length -ge 4 -and $_ -notin 'Users', 'Documents' })
+    $leaked = @($leak | Where-Object { $_.Length -ge 3 -and $glog -match [regex]::Escape($_) })
+    Check ($leaked.Count -eq 0 -and $glog -match '\[Documents\]' -and $glog -match 'Users/user/z') "group: user name, computer name and personal folders never leave the PC (leaked: $($leaked -join ', '))"
+    $dl = GReq GET "/s/$gid/log/download" $null @($gcookie)
+    Check ($dl.code -eq '200' -and $dl.headers -match 'attachment; filename="Tester_One-log-\d{8}-\d{4}\.txt"' -and $dl.body -match 'group first line' -and $dl.body -notmatch [regex]::Escape($env:COMPUTERNAME)) "group: a member's log downloads as a text file"
+    Check ((GReq GET "/s/$gid/log/download").code -eq '401') "group: downloading needs a sign-in"
+    $ldl = (curl.exe -s -D - http://127.0.0.1:8795/log/download) -join "`n"
+    Check ($ldl -match 'attachment; filename="game-log-' -and $ldl -match 'group first line') "the local log page downloads too"
+    $gev = (curl.exe -sN --max-time 3 -H $gcookie "$gbase/s/$gid/events") -join "`n"
+    Check ($gev -match '^data: \{"time"' -or $gev -match '(?m)^data: \{"time"') "group: the member's live numbers arrive"
+    Check ((GReq POST '/api/push' '{"epoch":"x","lines":[]}' @('Authorization: Bearer AAAA-BBBB-CCCC-DDDD-EEEE-FFFF')).code -eq '401') "group: a push with an unknown code -> 401"
+    Check ((curl.exe -s -o NUL -w '%{http_code}' -m 5 -X POST -H 'Content-Type: application/json' -H 'Content-Length: 900000' --data-binary '{}' "$gbase/api/push") -match '413|400') "group: an oversized push is refused"
+    Check ((GReq POST '/api/stop' '{}' @("Authorization: Bearer $gcode")).code -eq '200' -and @(((GReq GET '/api/group' $null @($gcookie)).body | ConvertFrom-Json).sharing).Count -le 1) "group: stop sharing is accepted"
+    $rs = GReq POST '/api/push' '{"epoch":"newrun01","after":5,"lines":[]}' @("Authorization: Bearer $gcode")
+    Check ($rs.code -eq '409' -and $rs.body -match 'resync') "group: a run the relay doesn't know asks for the history again (resync)"
+    Check ((GReq POST '/api/stop' '{"epoch":"newrun01"}' @("Authorization: Bearer $gcode")).code -eq '200') "group: stop names its run"
+    Start-Sleep -Milliseconds 600
+    $late = GReq POST '/api/push' '{"epoch":"newrun01","after":-1,"lines":[[1,"late",0]]}' @("Authorization: Bearer $gcode")
+    Check ($late.code -eq '409' -and $late.body -match 'stopped') "group: a late push of a stopped run is refused"
+    # the real sharer comes back by itself (its own run: the relay asks it to resync, then accepts it)
+    $back = $false
+    for ($i = 0; $i -lt 30 -and -not $back; $i++) { Start-Sleep -Milliseconds 300; $back = @(((GReq GET '/api/group' $null @($gcookie)).body | ConvertFrom-Json).sharing).Count -eq 1 }
+    Check $back "group: the sharer resumes after the relay forgot its run"
+    $hist = (curl.exe -sN --max-time 2 -H $gcookie "$gbase/s/$gid/log/stream?n=50") -join "`n"
+    Check ($hist -match 'group first line') "group: ...and resends its history (nothing it still has is skipped)"
+    # a removed member's open live views are closed at once (here: their view of their own log)
+    $vjob = Start-Job { param($ck, $u) $sw = [Diagnostics.Stopwatch]::StartNew(); curl.exe -sN --max-time 10 -H $ck $u | Out-Null; $sw.ElapsedMilliseconds } -ArgumentList $gcookie, "$gbase/s/$gid/log/stream?n=1"
+    Start-Sleep -Milliseconds 1500
+    & $exe --group-remove $gid --group-members $members
+    Check ($LASTEXITCODE -eq 0) "group: --group-remove"
+    # the relay notices the file on its next look at the members (any request): ask for the list once
+    GReq GET '/api/group' $null @($gcookie) | Out-Null
+    $vms = [int](Receive-Job $vjob -Wait -AutoRemoveJob | Select-Object -Last 1)
+    Check ($vms -lt 8000) "group: removing a member closes their open live views ($vms ms of a 10 s stream)"
+    Start-Sleep -Milliseconds 300
+    Check ((GReq GET '/api/group' $null @($gcookie)).code -eq '401') "group: a removed member's session ends at once"
+    Check ((GReq POST '/api/push' '{"epoch":"x","lines":[]}' @("Authorization: Bearer $gcode")).code -eq '401') "group: a removed member's code no longer shares"
+} finally {
+    foreach ($p in $gshare, $grelay) { if (-not $p.HasExited) { Stop-Process -Id $p.Id -ErrorAction SilentlyContinue } }
+    Start-Sleep -Milliseconds 300
+    Remove-Item $gdir -Recurse -ErrorAction SilentlyContinue
 }
 
 Remove-Item $testSettings -ErrorAction SilentlyContinue

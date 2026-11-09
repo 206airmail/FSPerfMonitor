@@ -16,6 +16,11 @@ public sealed class AppSettings
     public bool WelcomeShown { get; set; }                  // #8: the first start opens /welcome instead of the dashboard
     public bool HomeNetwork { get; set; }                   // #9: the dashboard also on the home network (+ firewall rule)
     public string UserCopy { get; set; } = "";              // the user's own starter (not the protected copy): the Run entry's target
+    public bool ShareWithGroup { get; set; }                // #14: share the live numbers and game log with a group relay
+    public string GroupAddress { get; set; } = "";          //      its address (perf.example.com:9443)
+    public string InviteCode { get; set; } = "";            //      this PC's invite code (a secret: never shown to other devices)
+    public bool HostGroup { get; set; }                     // #14: run the group relay on this PC (behind an HTTPS web server)
+    public int GroupPort { get; set; } = 8766;              //      on 127.0.0.1:<GroupPort>
 
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 
@@ -24,6 +29,8 @@ public sealed class AppSettings
     {
         ProfileFolder ??= "";
         UserCopy ??= "";
+        GroupAddress ??= "";
+        InviteCode ??= "";
         return this;
     }
 }
@@ -31,8 +38,13 @@ public sealed class AppSettings
 // what GET /api/settings returns: the settings, whether this viewer may change them, and the facts the page shows
 // FrameTimes: "ready" | "signout" (in the group, sign out and back in) | "setup" (not set up) | "missing" (no PresentMon)
 // NetworkUrls: the addresses a phone at home opens (only while the dashboard listens on the home network)
+// Sharing: "off" | "connecting" | "sharing" | "bad-code" | "unreachable" | "bad-address"; SharingAs: the name the group knows
+// GroupProblem: why the hosted group isn't running ("" = fine); Members: the hosted group (this PC only)
 public sealed record SettingsView(AppSettings Settings, bool CanEdit, string ReadOnlyReason, string DefaultProfileFolder,
-    string Version, string Url, string Token, string FrameTimes, bool Elevated, List<string> NetworkUrls);
+    string Version, string Url, string Token, string FrameTimes, bool Elevated, List<string> NetworkUrls,
+    string Sharing, string SharingAs, bool GroupRunning, string GroupProblem, List<GroupMemberView> Members);
+
+public sealed record GroupMemberView(string Id, string Name, DateTime Added);
 
 public static class SettingsStore
 {
@@ -70,6 +82,12 @@ public static class SettingsStore
     public static string? Validate(AppSettings s)
     {
         if (s.Port < 1 || s.Port > 65535) return "Enter a whole number from 1 to 65535.";
+        if (s.HostGroup && (s.GroupPort < 1 || s.GroupPort > 65535 || s.GroupPort == s.Port))
+            return "The group’s port must be a whole number from 1 to 65535, different from the dashboard’s port.";
+        if (s.ShareWithGroup) {
+            if (ShareClient.ParseAddress(s.GroupAddress, out string? why) == null) return why;
+            if (RelayMembers.Normalize(s.InviteCode).Length != 24) return "Enter the invite code you got from the group’s host.";
+        }
         if (s.ProfileFolder.Length > 0) {
             // a folder on this PC only: a network or device path (\\server\share, \\?\, \\.\) would make even the existence
             // check below connect to that server (and Windows may send the user's login to it)
@@ -91,6 +109,9 @@ public static class SettingsStore
             ProfileDir = s.ProfileFolder.Length > 0 ? s.ProfileFolder : DefaultProfileFolder,
             NoBrowser = !s.OpenDashboardOnStart,
             Lan = s.HomeNetwork,
+            GroupPort = s.HostGroup ? s.GroupPort : 0,
+            ShareUrl = s.ShareWithGroup ? s.GroupAddress : null,
+            ShareCode = s.ShareWithGroup ? s.InviteCode : null,
         };
         // a start by Windows (logon) or a hand-over to the full-permissions copy never opens the browser
         if (args.Contains("--autostart")) o.NoBrowser = true;

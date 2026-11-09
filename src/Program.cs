@@ -32,6 +32,10 @@ public sealed class Options
     public bool Exit;           // ask the running tray app to quit cleanly
     public string Instance = "SVSPerfMonitor";   // single-instance name (the self-test uses its own)
     public string? SettingsFile;                 // the tray app's settings file (default %APPDATA%; the self-test uses its own)
+    public int GroupPort;                        // #14: host a group relay on 127.0.0.1:<port> (0 = no)
+    public string? GroupMembers;                 // its members file (default next to the settings; the self-test uses its own)
+    public string? ShareUrl;                     // #14: share with the group relay at this address
+    public string? ShareCode;                    //      using this invite code
 
     // the command line, on top of `start` (the tray app's settings) or the defaults
     public static Options Parse(string[] a, Options? start = null)
@@ -59,6 +63,10 @@ public sealed class Options
                 case "--settings": o.SettingsFile = Next(); break;
                 case "--autostart": o.NoBrowser = true; break;   // started by Windows / handed over: no browser
                 case "--handover": break;                        // internal: wait for the copy that hands over (Tray)
+                case "--group-port": o.GroupPort = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                case "--group-members": o.GroupMembers = Next(); break;
+                case "--share": o.ShareUrl = Next(); break;
+                case "--share-code": o.ShareCode = Next(); break;
                 default: throw new ArgumentException($"unknown option {a[i]}");
             }
         }
@@ -81,6 +89,9 @@ public static class Program
 
           options: --port <n>  --lan  --interval-ms <ms>  --sample-hz <hz> (main-loop breakdown, 0 = off)
                    --pid <n>  --profile <folder>  --seconds <n>  --presentmon <exe>  --no-frames  --tray
+                   group: --group-port <n> (host a group relay on this PC, behind an HTTPS web server)
+                          --share <address> --share-code <invite code> (share with a group)
+                          --group-add <name> / --group-list / --group-remove <id> (manage the members)
         The command line never reads the tray app's settings. Help and source: https://github.com/206airmail/FSPerfMonitor
         """;
     private const string TrayChildArg = "--tray-child";   // internal: the console-less copy the tray app restarted as
@@ -118,6 +129,8 @@ public static class Program
             Console.WriteLine(AutoStart.TaskXml(AutoStart.CurrentUserSid(), AutoStart.StarterPath(), args[1] == "1", args[2]));
             return 0;
         }
+        if (args.Length >= 1 && args[0] is "--group-add" or "--group-list" or "--group-remove") return GroupCommand(args);
+        if (args.Length == 1 && args[0] == "--redact") { Console.Write(Redactor.Apply(Console.In.ReadToEnd())); return 0; }   // self-test helper (#14): stdin -> stdout
         if (args.Length == 1 && args[0] == "--frametimes-access") { Console.WriteLine(AutoStart.FrameTimesAccess()); return 0; }   // self-test helper
         Options o;
         try { o = Options.Parse(args); } catch (Exception e) { Console.Error.WriteLine($"SVSPerfMonitor: {e.Message}"); return 2; }
@@ -159,6 +172,34 @@ public static class Program
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Set(); };
         while (!stop.Wait(200) && !host.WaitForStop(0)) { }
         return 0;   // disposing the host stops the monitor and the frame capture
+    }
+
+    // the group's members from the command line: `--group-add <name> [--group-members <file>]` prints the invite code
+    private static int GroupCommand(string[] a)
+    {
+        string? file = null;
+        var rest = new List<string>();
+        for (int i = 0; i < a.Length; i++) {
+            if (a[i] == "--group-members" && i + 1 < a.Length) file = a[++i];
+            else if (a[i] == "--settings" && i + 1 < a.Length) SettingsStore.OverridePath = a[++i];
+            else rest.Add(a[i]);
+        }
+        var members = new RelayMembers(file ?? RelayMembers.DefaultFile);
+        switch (rest[0]) {
+            case "--group-add" when rest.Count == 2: {
+                var (m, code, problem) = members.Add(rest[1]);
+                if (m == null) { Console.Error.WriteLine("SVSPerfMonitor: " + problem); return 1; }
+                Console.WriteLine($"{m.Id} {m.Name} {code}");
+                return 0;
+            }
+            case "--group-list" when rest.Count == 1:
+                foreach (var m in members.All()) Console.WriteLine($"{m.Id} {m.Name}");
+                return 0;
+            case "--group-remove" when rest.Count == 2:
+                return members.Remove(rest[1]) ? 0 : 1;
+        }
+        Console.Error.WriteLine("SVSPerfMonitor: --group-add <name> | --group-list | --group-remove <id>");
+        return 2;
     }
 
     // a process whose main thread spins: the self-test attaches to it (--pid) and must see ~100% main-thread busy

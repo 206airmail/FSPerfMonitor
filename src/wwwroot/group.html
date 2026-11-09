@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark light">
+<title>SVS Performance Monitor · Group</title><link rel="icon" href="/favicon.png" type="image/png"><link rel="stylesheet" href="/assets/styles.css">
+<!-- The group relay's home page (0.6, #14): sign in with your invite code, then everyone who is sharing right now, each
+     with their live dashboard and game log (/s/<id>/, /s/<id>/log). Data: GET /api/group, POST /api/signin, /api/signout. -->
+</head>
+<body data-page="group"><a class="skip" href="#main">Skip to content</a>
+<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios · Group</div></div></a><nav aria-label="Main navigation"><a href="/" aria-current="page">Group</a></nav></div></header>
+<main id="main" class="wrap form-page">
+<div class="page-title"><h1>Group</h1><span class="tag" id="me" hidden></span></div>
+<div id="notice" role="status" class="banner" hidden></div>
+<section class="card stack" id="signin" hidden><h2>Sign in</h2>
+<p class="small">Enter the invite code you got from the group’s host. It is the same code your SVS Performance Monitor uses to share.</p>
+<form id="signin-form" class="stack" novalidate>
+<div class="field"><label for="code">Invite code</label><input id="code" type="password" autocomplete="current-password" spellcheck="false" aria-describedby="code-error"><span id="code-error" class="field-error" role="alert" hidden></span></div>
+<div class="row between"><p class="small">This browser stays signed in for 30 days.</p><button class="primary" type="submit" id="signin-button">Sign in</button></div>
+</form></section>
+<section class="card stack" id="group" hidden><div class="row between"><h2>Sharing now</h2><button type="button" id="signout">Sign out</button></div>
+<div class="plugin-list" id="sharing"></div>
+<p class="meta" id="empty" hidden>Nobody is sharing right now. This list updates by itself.</p>
+</section>
+</main>
+<footer class="wrap footer"><span>SimVizion Studios · SVS Performance Monitor</span><span>Only people in this group can see what is shared here.</span></footer>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let timer = null;
+
+function notice(title, text) {
+  const n = $("notice");
+  if (!title) { n.hidden = true; n.textContent = ""; return; }
+  n.textContent = "";
+  const d = document.createElement("div"), s = document.createElement("strong"), p = document.createElement("p");
+  s.textContent = title; p.className = "small"; p.textContent = text;
+  d.append(s, p); n.append(d); n.hidden = false;
+}
+
+function signedOut() {
+  $("signin").hidden = false; $("group").hidden = true; $("me").hidden = true;
+  if (timer) { clearInterval(timer); timer = null; }
+}
+
+function link(href, text) { const a = document.createElement("a"); a.className = "button"; a.href = href; a.textContent = text; return a; }
+
+function show(g) {
+  $("signin").hidden = true; $("group").hidden = false;
+  $("me").textContent = "Signed in as " + g.me; $("me").hidden = false;
+  const list = $("sharing");
+  list.textContent = "";
+  for (const s of g.sharing) {
+    const card = document.createElement("article"); card.className = "plugin";
+    const h = document.createElement("h3"); h.textContent = s.name;
+    const row = document.createElement("div"); row.className = "row"; row.style.marginTop = "6px";
+    const since = document.createElement("span"); since.className = "meta";
+    since.textContent = "Sharing since " + new Date(s.since).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = s.away ? "Quiet" : "Live";
+    row.append(since, tag);
+    const actions = document.createElement("div"); actions.className = "row"; actions.style.marginTop = "10px";
+    const base = "/s/" + encodeURIComponent(s.id) + "/";
+    actions.append(link(base, "Dashboard"), link(base + "log", "Game log"));
+    card.append(h, row, actions);
+    list.append(card);
+  }
+  $("empty").hidden = g.sharing.length > 0;
+}
+
+async function refresh() {
+  try {
+    const r = await fetch("/api/group", { cache: "no-store" });
+    if (r.status === 401) { signedOut(); return; }
+    if (!r.ok) throw new Error();
+    show(await r.json());
+    if (!timer) timer = setInterval(refresh, 5000);
+  } catch { notice("The group is not answering", "Check your connection, then reload this page."); }
+}
+
+$("signin-form").onsubmit = async e => {
+  e.preventDefault();
+  const code = $("code").value.trim();
+  const err = $("code-error");
+  if (!code) { err.textContent = "⚠ Enter your invite code."; err.hidden = false; return; }
+  $("signin-button").disabled = true;
+  try {
+    const r = await fetch("/api/signin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+    const body = await r.json();
+    if (!r.ok) { err.textContent = "⚠ " + body; err.hidden = false; return; }
+    err.hidden = true; $("code").value = "";
+    show(body);
+    if (!timer) timer = setInterval(refresh, 5000);
+  } catch { err.textContent = "⚠ The group is not answering. Try again."; err.hidden = false; }
+  finally { $("signin-button").disabled = false; }
+};
+
+$("signout").onclick = async () => {
+  try { await fetch("/api/signout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); } catch { }
+  signedOut();
+};
+
+if (new URLSearchParams(location.search).has("gone")) notice("Not sharing any more", "That person stopped sharing. Pick someone who is sharing now.");
+refresh();
+</script>
+</body></html>

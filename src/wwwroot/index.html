@@ -7,7 +7,7 @@
      waiting resets the histories; a lost connection keeps the last readings, clearly marked as old. -->
 </head>
 <body data-page="dashboard"><a class="skip" href="#main">Skip to content</a>
-<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a href="/" aria-current="page">Dashboard</a><a href="/log">Game log</a><a href="/settings">Settings</a></nav></div></header>
+<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a href="./" aria-current="page">Dashboard</a><a href="log">Game log</a><a href="/settings">Settings</a></nav></div></header>
 <main id="main" class="wrap">
 <div class="page-title"><h1>Dashboard</h1><div class="row"><span class="status" id="game-status"></span><span class="tag" id="mode"></span></div></div>
 <p id="announce" role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap"></p>
@@ -22,7 +22,7 @@
 <section class="card panel span-all"><h2>Per-frame detail</h2><div class="readout" id="frame-details"></div><p class="meta" id="capture-note" style="margin-top:12px"></p></section>
 <section class="card panel"><h2 class="section-head">Main thread: where the time goes</h2><table><thead><tr><th scope="col">Module / kind</th><th scope="col" class="numeric">Share / samples</th></tr></thead><tbody id="modules"></tbody></table><p class="meta" id="sampling" style="margin-top:12px"></p><p class="small" style="margin-top:8px">A plugin’s share counts its own code. Game code it calls counts as the game. Lua mods also count as the game. These shares are not the total cost of a plugin.</p></section>
 <section class="card panel"><h2 class="section-head">Busiest game threads</h2><table><thead><tr><th scope="col">Thread ID</th><th scope="col" class="numeric">Busy · one core</th></tr></thead><tbody id="threads"></tbody></table></section>
-<section class="card panel span-all"><div class="row between"><h2>FSPluginHost plugins</h2><a href="/log">Open game log →</a></div><p class="small" id="host" style="margin-top:8px"></p><p class="meta" id="host-written" style="margin-top:4px"></p><div class="plugin-list" id="plugins"></div><p class="small" id="services" style="margin-top:12px"></p></section>
+<section class="card panel span-all"><div class="row between"><h2>FSPluginHost plugins</h2><a href="log">Open game log →</a></div><p class="small" id="host" style="margin-top:8px"></p><p class="meta" id="host-written" style="margin-top:4px"></p><div class="plugin-list" id="plugins"></div><p class="small" id="services" style="margin-top:12px"></p></section>
 <section class="card panel span-all"><h2 class="section-head">Diagnostics</h2><p class="small mono" id="diagnostics"></p></section>
 </div></details>
 </main>
@@ -61,7 +61,9 @@ const banners = {
 
 // the frame-times setup state (ready / signout / setup / missing), from the settings: "denied" capture = not set up yet
 let frameAccess = "";
-fetch("/api/settings", { cache: "no-store" }).then(r => r.json()).then(v => { frameAccess = v.frameTimes || ""; if (last) render(last); }).catch(() => { });
+// a group member's dashboard on the relay (#14): no settings there, and no setup buttons for someone else's PC
+const RELAY = document.documentElement.dataset.relay === "1";
+if (!RELAY) fetch("/api/settings", { cache: "no-store" }).then(r => r.json()).then(v => { frameAccess = v.frameTimes || ""; if (last) render(last); }).catch(() => { });
 
 // one page state from a real snapshot (spec: Dashboard states)
 function stateOf(s) {
@@ -122,7 +124,7 @@ function render(s) {
 
   const b = banners[st];
   $("frame-banner").hidden = !b;
-  if (b) $("frame-banner").innerHTML = `<span class="symbol" aria-hidden="true">ⓘ</span><div><strong>${esc(b[0])}</strong><p class="small">${esc(b[1])}</p></div>${b[2] ? `<div class="actions"><a class="button primary" href="${b[3]}">${esc(b[2])}</a></div>` : ""}`;
+  if (b) $("frame-banner").innerHTML = `<span class="symbol" aria-hidden="true">ⓘ</span><div><strong>${esc(b[0])}</strong><p class="small">${esc(b[1])}</p></div>${b[2] && !RELAY ? `<div class="actions"><a class="button primary" href="${b[3]}">${esc(b[2])}</a></div>` : ""}`;
 
   // frame-time trend (only with frame times)
   $("trend").hidden = !frameHist.some(p => finite(p[0]));
@@ -181,7 +183,7 @@ function onSnapshot(s) {
 
 let es = null;
 function connect() {
-  es = new EventSource("/events");
+  es = new EventSource("events");   // relative: the group relay serves this page at /s/<id>/
   es.onopen = () => { connected = true; };
   es.onmessage = e => { connected = true; try { onSnapshot(JSON.parse(e.data)); } catch { } };
   es.onerror = () => { connected = false; if (last) render(last); else { $("verdict").textContent = "Connecting…"; } es.close(); setTimeout(connect, 2000); };

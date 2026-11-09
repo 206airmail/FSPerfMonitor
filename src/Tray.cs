@@ -15,7 +15,7 @@ public static unsafe class TrayApp
     private const string Title = "SVS Performance Monitor";
     private const uint WM_TRAY = TrayNative.WM_APP + 1, WM_OPEN_REQUEST = TrayNative.WM_APP + 2, WM_EXIT_REQUEST = TrayNative.WM_APP + 3,
         WM_SETTINGS_SAVED = TrayNative.WM_APP + 4;
-    private const int CmdOpen = 1, CmdLog = 2, CmdSettings = 3, CmdExit = 9;
+    private const int CmdOpen = 1, CmdLog = 2, CmdSettings = 3, CmdStopSharing = 4, CmdExit = 9;
     private const nuint TimerId = 1, RestartTimerId = 2;
 
     private static MonitorHost? s_host;
@@ -64,7 +64,9 @@ public static unsafe class TrayApp
                     s_settings = s;
                 }
                 bool restart = was.Port != s.Port || was.MainLoopBreakdown != s.MainLoopBreakdown || was.ProfileFolder != s.ProfileFolder
-                    || was.RunWithFullPermissions != s.RunWithFullPermissions || was.HomeNetwork != s.HomeNetwork;
+                    || was.RunWithFullPermissions != s.RunWithFullPermissions || was.HomeNetwork != s.HomeNetwork
+                    || was.ShareWithGroup != s.ShareWithGroup || was.GroupAddress != s.GroupAddress || was.InviteCode != s.InviteCode
+                    || was.HostGroup != s.HostGroup || was.GroupPort != s.GroupPort;
                 if (netProblem != null) {
                     // partly saved: apply what was saved (the page gets the error, so Saved() won't come), then say why
                     if (restart) TrayNative.PostMessageW(s_hwnd, WM_SETTINGS_SAVED, IntPtr.Zero, IntPtr.Zero);
@@ -419,6 +421,8 @@ public static unsafe class TrayApp
             Append(menu, TrayNative.MF_STRING, CmdOpen, "Open dashboard");
             Append(menu, TrayNative.MF_STRING, CmdLog, "Game log");
             Append(menu, TrayNative.MF_STRING, CmdSettings, "Settings");
+            bool sharing; lock (s_settingsLock) sharing = s_settings.ShareWithGroup;
+            if (sharing) Append(menu, TrayNative.MF_STRING, CmdStopSharing, "Stop sharing with my group");
             Append(menu, TrayNative.MF_SEPARATOR, 0, null);
             Append(menu, TrayNative.MF_STRING, CmdExit, "Exit");
             TrayNative.SetMenuDefaultItem(menu, CmdOpen, 0);
@@ -433,6 +437,14 @@ public static unsafe class TrayApp
                 case CmdLog: OpenUrl(DashboardUrl() + "log"); break;
                 case CmdSettings: OpenUrl(DashboardUrl() + "settings"); break;
                 case CmdExit: TrayNative.DestroyWindow(s_hwnd); break;
+                case CmdStopSharing: {
+                    var s = s_backend.Current;
+                    s.ShareWithGroup = false;
+                    string? problem = s_backend.Save(s);
+                    if (problem == null) s_backend.Saved();   // restarts the monitor without sharing (the group sees it at once)
+                    else TrayNative.MessageBoxW(IntPtr.Zero, "Sharing could not be stopped: " + problem, Title, TrayNative.MB_ICONWARNING);
+                    break;
+                }
             }
         } finally {
             TrayNative.DestroyMenu(menu);
@@ -466,7 +478,14 @@ public static unsafe class TrayApp
     private static void Refresh()
     {
         var (watching, status) = Describe(s_host?.Latest);
-        string tip = $"{Title}\n{status}";
+        string share = (s_host?.ShareState ?? "off") switch {
+            "sharing" or "connecting" => "Sharing with your group",
+            "bad-code" => "Sharing: the group doesn’t accept your invite code",
+            "unreachable" => "Sharing: can’t reach your group",
+            "bad-address" => "Sharing: check the group’s address in Settings",
+            _ => "",
+        };
+        string tip = share.Length > 0 ? $"{Title}\n{status}\n{share}" : $"{Title}\n{status}";
         if (tip.Length > 127) tip = tip[..127];
         if (watching == s_watching && tip == s_tip && s_iconAdded) return;
         s_watching = watching; s_tip = tip; s_status = status;

@@ -6,10 +6,10 @@
      twice). Lines are always inserted as text, never as HTML. -->
 </head>
 <body class="log-page" data-page="log"><a class="skip" href="#main">Skip to content</a>
-<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a href="/">Dashboard</a><a href="/log" aria-current="page">Game log</a><a href="/settings">Settings</a></nav></div></header>
+<header class="masthead"><div class="wrap header-inner"><a class="identity" href="/"><img src="/assets/logo-64.png" alt="" width="40" height="40"><div><div class="product">SVS Performance Monitor</div><div class="studio">SimVizion Studios</div></div></a><nav aria-label="Main navigation"><a href="./">Dashboard</a><a href="log" aria-current="page">Game log</a><a href="/settings">Settings</a></nav></div></header>
 <main id="main" class="wrap"><div class="page-title"><h1>Game log</h1><span class="status" id="log-status" role="status"></span></div>
 <div class="log-tools"><label for="filter" class="small">Find text in the log</label><input id="filter" type="search" placeholder="Filter lines…" autocomplete="off" autocapitalize="off" spellcheck="false">
-<div class="row between"><div class="filters"><button id="bErr" aria-pressed="false">Errors</button><button id="bWarn" aria-pressed="false">Warnings</button><button id="bFail" aria-pressed="false">FAIL</button></div><div class="actions"><button id="pause" aria-pressed="false">Pause</button><button id="clear">Clear</button></div></div>
+<div class="row between"><div class="filters"><button id="bErr" aria-pressed="false">Errors</button><button id="bWarn" aria-pressed="false">Warnings</button><button id="bFail" aria-pressed="false">FAIL</button></div><div class="actions"><button id="pause" aria-pressed="false">Pause</button><button id="clear">Clear</button><a class="button" id="download" href="log/download" download title="Save the lines kept for this log as a text file">Download</a></div></div>
 <p class="meta">Selected levels are combined. Text ignores letter case. Clear affects this view only.</p></div>
 <div class="log-viewport" id="log" role="region" aria-label="Game log lines" tabindex="0"></div>
 <div class="log-bottom"><span class="meta" id="log-count"></span><button class="primary" id="jump" hidden>Jump to live ↓</button></div></main>
@@ -129,7 +129,7 @@ let es = null, retry = null;
 function connect() {
   clearTimeout(retry);
   if (es) { es.close(); es = null; }
-  es = new EventSource("/log/stream?n=" + PARAM_N + (lastId ? "&after=" + encodeURIComponent(lastId) : ""));
+  es = new EventSource("log/stream?n=" + PARAM_N + (lastId ? "&after=" + encodeURIComponent(lastId) : ""));
   es.onopen = () => { connected = true; setStatus(); };
   es.onmessage = e => {
     connected = true;

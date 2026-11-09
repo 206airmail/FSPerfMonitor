@@ -21,16 +21,12 @@ public interface ISettingsBackend
 public sealed class WebServer : IDisposable
 {
     private readonly TcpListener _listener;
-    private readonly List<StreamWriter> _clients = new();
-    private readonly List<LogClient> _logClients = new();   // under _tail.Gate
-    private readonly LogTail? _tail;
+    private readonly EventHub _events = new(16);
+    private readonly SemaphoreSlim _downloads = new(2, 2);   // log downloads at a time
+    private readonly LogHub? _logs;
     private readonly byte[] _logPage;
-    private const int MaxLogClients = 8;
-    private const int MaxEventClients = 16;
     private const int RequestDeadlineMs = 10000;
-    private int _reserved;  // live-view slots taken but not yet registered (under _lock)
     private readonly object _lock = new();
-    private string _last = "{}";
     private readonly byte[] _page;
     private volatile bool _stop;
 
@@ -38,10 +34,9 @@ public sealed class WebServer : IDisposable
     // Firewall must allow the port inbound (Program prints the rule when it is missing)
     public WebServer(int port, bool lan = false, LogTail? tail = null)
     {
-        _tail = tail;
         _port = port; _lanMode = lan;
         _hosts = BuildHosts(); _hostsAt = DateTime.UtcNow;
-        if (tail != null) { tail.Appended += OnLogAppended; tail.Heartbeat += OnLogHeartbeat; }
+        if (tail != null) _logs = new LogHub(tail, 8);
         _listener = new TcpListener(lan ? IPAddress.Any : IPAddress.Loopback, port);
         using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("index.html")!;
         using var ms = new MemoryStream();
@@ -105,8 +100,8 @@ public sealed class WebServer : IDisposable
             if (!HostAllowed(hostHeader)) { Send(stream, 403, "text/plain", Encoding.ASCII.GetBytes("forbidden host")); c.Close(); return; }   // DNS rebinding guard
             string path = line.Split(' ').ElementAtOrDefault(1) ?? "/";
             string route = path.Split('?')[0];
-            if (line.StartsWith("POST ") && (route == "/api/settings" || route == "/api/frametimes-setup")) {
-                HandleSaveSettings(c, stream, origin, contentType, saveToken, contentLength, deadline, route == "/api/frametimes-setup");
+            if (line.StartsWith("POST ") && (route is "/api/settings" or "/api/frametimes-setup" or "/api/group-members")) {
+                HandleSaveSettings(c, stream, origin, contentType, saveToken, contentLength, deadline, route);
                 c.Close();
                 return;
             }
@@ -119,198 +114,24 @@ public sealed class WebServer : IDisposable
             if (route == "/settings") { Send(stream, 200, "text/html; charset=utf-8", _settingsPage); c.Close(); return; }
             if (route == "/welcome") { Send(stream, 200, "text/html; charset=utf-8", _welcomePage); c.Close(); return; }
             if (Assets.TryGetValue(route, out var asset)) { Send(stream, 200, asset.Type, asset.Body, cache: true); c.Close(); return; }
-            if (path == "/events") {
-                // reserve a live-view slot atomically (check + reserve under one lock), released when registered or failed
-                lock (_lock) {
-                    if (_clients.Count + _reserved >= MaxEventClients) {
-                        Send(stream, 503, "text/plain", Encoding.ASCII.GetBytes("too many live views"));
-                        c.Close();
-                        return;
-                    }
-                    _reserved++;
-                }
-                bool added = false;
-                try {
-                    // Publish writes on the sampling thread: a client that stops reading (full socket buffer) must not stall
-                    // sampling, so a write that takes longer than 2 s throws and Publish drops that client
-                    stream.WriteTimeout = 2000;
-                    var w = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
-                    w.Write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n");
-                    w.Write($"data: {_last}\n\n");
-                    lock (_lock) { _reserved--; added = true; if (!_stop) _clients.Add(w); else { try { w.Dispose(); } catch { } } }
-                } finally {
-                    if (!added) lock (_lock) _reserved--;
-                }
-                return;  // kept open; Publish writes to it
-            }
-            if (route == "/log/stream" && _tail != null) {
-                ServeLogStream(c, stream, path, lastEventId);
+            if (path == "/events") { _events.Serve(c, stream); return; }   // kept open; Publish writes to it
+            if (route == "/log/stream" && _logs != null) {
+                _logs.Serve(c, stream, path, lastEventId);
                 return;  // kept open; the tail writes to it
             }
+            if (route == "/log/download" && _logs != null) {
+                if (!_downloads.Wait(0)) Send(stream, 503, "text/plain", Encoding.ASCII.GetBytes("busy, try again in a moment"));
+                else try { _logs.Download(stream, "game"); } finally { _downloads.Release(); }
+                c.Close();
+                return;
+            }
             if (route == "/log") { Send(stream, 200, "text/html; charset=utf-8", _logPage); c.Close(); return; }
-            if (path == "/api/snapshot") Send(stream, 200, "application/json", Encoding.UTF8.GetBytes(_last));
+            if (path == "/api/snapshot") Send(stream, 200, "application/json", Encoding.UTF8.GetBytes(_events.Last));
             else if (path == "/" || path.StartsWith("/?")) Send(stream, 200, "text/html; charset=utf-8", _page);
             else Send(stream, 404, "text/plain", Encoding.ASCII.GetBytes("not found"));
             c.Close();
         } catch {
             try { c.Close(); } catch { }
-        }
-    }
-
-    // ---- the log stream -------------------------------------------------------------------------------------------
-    // GET /log/stream?n=500[&after=<epoch>.<seq>]  (the Last-Event-ID header a reconnecting EventSource sends wins over ?after=).
-    // Each event: `id: <epoch>.<last seq in it>` and data {"e":epoch,"reset":bool,"gap":bool,"lines":[[seq,text,marker],...]}.
-    // reset = the client should drop what it shows (a fresh view); gap = lines between its last id and the first line here were
-    // already pushed out of the ring.
-    // Network I/O never happens under tail.Gate: every viewer has a small bounded queue and its own writer thread. A viewer
-    // whose queue overflows, or whose write exceeds the per-event deadline, is closed (its browser reconnects with Last-Event-ID).
-    private sealed class LogClient
-    {
-        public const int MaxQueued = 64, EventDeadlineMs = 5000, ChunkBytes = 16 * 1024;
-        private readonly TcpClient _tcp;
-        private readonly NetworkStream _stream;
-        private readonly Queue<object> _q = new();   // string (ready text) or HistoryItem
-        private bool _closed;
-        public LogClient(TcpClient tcp, NetworkStream stream) { _tcp = tcp; _stream = stream; }
-        public bool Closed { get { lock (_q) return _closed; } }
-
-        // never blocks: false = the client was dropped (queue full)
-        public bool Enqueue(object item)
-        {
-            lock (_q) {
-                if (_closed) return false;
-                if (_q.Count >= MaxQueued) { CloseLocked(); return false; }
-                _q.Enqueue(item);
-                Monitor.Pulse(_q);
-                return true;
-            }
-        }
-
-        public void Close() { lock (_q) CloseLocked(); }
-        private void CloseLocked()
-        {
-            if (_closed) return;
-            _closed = true;
-            Monitor.PulseAll(_q);
-            try { _tcp.Close(); } catch { }   // unblocks a write in progress
-        }
-
-        public object? Next()
-        {
-            lock (_q) {
-                while (_q.Count == 0 && !_closed) Monitor.Wait(_q);
-                return _closed ? null : _q.Dequeue();
-            }
-        }
-
-        public bool Write(string text)
-        {
-            var bytes = new UTF8Encoding(false).GetBytes(text);
-            var until = DateTime.UtcNow.AddMilliseconds(EventDeadlineMs);
-            try {
-                for (int off = 0; off < bytes.Length; off += ChunkBytes) {
-                    if (DateTime.UtcNow > until) return false;
-                    _stream.Write(bytes, off, Math.Min(ChunkBytes, bytes.Length - off));
-                }
-                return true;
-            } catch { return false; }
-        }
-    }
-
-    private sealed record HistoryItem(List<LogLine> Lines, bool Reset, bool Gap, long LastSeq);
-
-    private void ServeLogStream(TcpClient c, NetworkStream stream, string path, string lastEventId)
-    {
-        var tail = _tail!;
-        int n = 500;
-        string after = "";
-        int q = path.IndexOf('?');
-        if (q >= 0) {
-            foreach (var kv in path[(q + 1)..].Split('&')) {
-                int eq = kv.IndexOf('=');
-                if (eq < 0) continue;
-                string k = kv[..eq], v = Uri.UnescapeDataString(kv[(eq + 1)..]);
-                if (k == "n" && int.TryParse(v, out int nn)) n = Math.Clamp(nn, 0, tail.RingSize);
-                else if (k == "after" && v.Length > 0) after = v;
-            }
-        }
-        if (lastEventId.Length > 0) after = lastEventId;   // the browser's own reconnect id is always newer than a URL's
-        long afterSeq = -1;
-        bool resumed = false;
-        int dot = after.IndexOf('.');
-        if (dot > 0 && after[..dot] == tail.Epoch && long.TryParse(after[(dot + 1)..], out long a) && a >= 0) { afterSeq = a; resumed = true; }
-        LogClient? client = null;
-        try {
-            stream.WriteTimeout = 2000;
-            var cl = new LogClient(c, stream);
-            bool full = false;
-            lock (tail.Gate) {            // snapshot + register under one lock (no I/O in here): no gap, no duplicate
-                if (_logClients.Count >= MaxLogClients || _stop) full = true;   // stopping: no new viewers
-                else {
-                    if (resumed && afterSeq > tail.LastSeq) { afterSeq = -1; resumed = false; }
-                    var lines = tail.Snapshot(afterSeq, n, out bool gap);
-                    cl.Enqueue("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nX-Accel-Buffering: no\r\nConnection: keep-alive\r\n\r\nretry: 2000\n\n");
-                    // the game restarted after this viewer's last line, but the marker already left the ring (Codex #46): the
-                    // batch cannot carry the boundary, so tell the page to drop what it shows (reset) instead
-                    long mk = tail.LastMarkerSeq;
-                    bool lostRestart = resumed && mk > afterSeq && lines.Count > 0 && lines[0].Seq > mk;
-                    if (lines.Count > 0 || !resumed) cl.Enqueue(new HistoryItem(lines, !resumed || lostRestart, gap, lines.Count > 0 ? lines[^1].Seq : tail.LastSeq));
-                    _logClients.Add(cl);
-                    client = cl;
-                }
-            }
-            if (full) {
-                Send(stream, 503, "text/plain", Encoding.ASCII.GetBytes("too many log views"));
-                c.Close();
-                return;
-            }
-            new Thread(() => LogWriter(client!)) { IsBackground = true, Name = "fsperf-logclient" }.Start();
-        } catch {
-            try { c.Close(); } catch { }
-        }
-    }
-
-    private void LogWriter(LogClient cl)
-    {
-        try {
-            while (true) {
-                object? item = cl.Next();
-                if (item == null) break;
-                string text = item is HistoryItem h ? LogEvent(_tail!, h.Lines, h.Reset, h.Gap, h.LastSeq) : (string)item;
-                if (!cl.Write(text)) break;
-            }
-        } catch { }
-        cl.Close();
-        lock (_tail!.Gate) _logClients.Remove(cl);
-    }
-
-    private static string LogEvent(LogTail tail, IReadOnlyList<LogLine> lines, bool reset, bool gap, long lastSeq)
-    {
-        var sb = new StringBuilder(64 + lines.Count * 120);
-        sb.Append("id: ").Append(tail.Epoch).Append('.').Append(lastSeq).Append("\ndata: {\"e\":\"").Append(tail.Epoch).Append("\",\"reset\":")
-          .Append(reset ? "true" : "false").Append(",\"gap\":").Append(gap ? "true" : "false").Append(",\"lines\":[");
-        for (int i = 0; i < lines.Count; i++) {
-            if (i > 0) sb.Append(',');
-            sb.Append('[').Append(lines[i].Seq).Append(',').Append(System.Text.Json.JsonSerializer.Serialize(lines[i].Text, FsperfJson.LogText))
-              .Append(lines[i].Marker ? ",1]" : ",0]");
-        }
-        return sb.Append("]}\n\n").ToString();
-    }
-
-
-    // both run under tail.Gate on the tailer's thread: they only queue, never touch a socket
-    private void OnLogAppended(IReadOnlyList<LogLine> lines)
-    {
-        if (_logClients.Count == 0) return;
-        FanOut(LogEvent(_tail!, lines, false, false, lines[^1].Seq));
-    }
-
-    private void OnLogHeartbeat() { if (_logClients.Count > 0) FanOut(": keep-alive\n\n"); }
-
-    private void FanOut(string text)
-    {
-        for (int i = _logClients.Count - 1; i >= 0; i--) {
-            if (!_logClients[i].Enqueue(text)) _logClients.RemoveAt(i);   // full queue = dropped
         }
     }
 
@@ -349,7 +170,7 @@ public sealed class WebServer : IDisposable
 
     // one CRLF / LF terminated ASCII line of at most max bytes, read byte by byte (requests are tiny); null = too long, the
     // connection closed, or the request deadline passed
-    private static string? ReadLineBounded(NetworkStream s, int max, DateTime deadline)
+    internal static string? ReadLineBounded(NetworkStream s, int max, DateTime deadline)
     {
         var sb = new StringBuilder();
         while (true) {
@@ -364,7 +185,7 @@ public sealed class WebServer : IDisposable
         }
     }
 
-    private static void Send(NetworkStream s, int code, string type, byte[] body, bool cache = false)
+    internal static void Send(NetworkStream s, int code, string type, byte[] body, bool cache = false)
     {
         string reason = code switch {
             200 => "OK", 400 => "Bad Request", 403 => "Forbidden", 404 => "Not Found", 409 => "Conflict", 413 => "Payload Too Large",
@@ -383,6 +204,7 @@ public sealed class WebServer : IDisposable
     // CORS preflight, which this server never answers) and its Origin is this dashboard. A phone on the home network
     // (--lan) sees the settings read-only.
     public ISettingsBackend? Settings { get; set; }
+    public MonitorHost? Host { get; set; }   // #14: the sharing state and the hosted group
 
     private static bool IsLocal(TcpClient c) =>
         c.Client.RemoteEndPoint is IPEndPoint ep && IPAddress.IsLoopback(ep.Address.IsIPv4MappedToIPv6 ? ep.Address.MapToIPv4() : ep.Address);
@@ -406,14 +228,20 @@ public sealed class WebServer : IDisposable
             : !local ? "Settings can be changed on the PC running SVS Performance Monitor." : "";
         bool canEdit = b != null && local;
         string frames = !FrameMonitor.PresentMonAvailable(null) ? "missing" : AutoStart.FrameTimesAccess();
-        var view = new SettingsView(b?.Current ?? new AppSettings(), canEdit, why, SettingsStore.DefaultProfileFolder,
+        var settings = b?.Current ?? new AppSettings();
+        if (!local) settings.InviteCode = "";   // a secret: never to another device
+        var h = Host;
+        var members = local && h?.GroupMembers != null
+            ? h.GroupMembers.All().Select(m => new GroupMemberView(m.Id, m.Name, m.Added)).ToList() : new List<GroupMemberView>();
+        var view = new SettingsView(settings, canEdit, why, SettingsStore.DefaultProfileFolder,
             Program.Version, $"http://127.0.0.1:{_port}/", canEdit ? _saveToken : "", frames, AutoStart.IsElevated(),
-            _lanMode ? AutoStart.HomeNetworkAddresses().Select(ip => $"http://{ip}:{_port}/").ToList() : new List<string>());
+            _lanMode ? AutoStart.HomeNetworkAddresses().Select(ip => $"http://{ip}:{_port}/").ToList() : new List<string>(),
+            h?.ShareState ?? "off", h?.ShareName ?? "", h?.GroupMembers != null && h.GroupProblem.Length == 0, h?.GroupProblem ?? "", members);
         return System.Text.Json.JsonSerializer.Serialize(view, FsperfJson.Default.SettingsView);
     }
 
     private void HandleSaveSettings(TcpClient c, NetworkStream stream, string origin, string contentType, string token, int length,
-        DateTime deadline, bool frameTimesSetup = false)
+        DateTime deadline, string route)
     {
         byte[] Err(string msg) => Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(msg, FsperfJson.Default.String));
         if (length <= 0 || length > 16 * 1024) {
@@ -433,7 +261,8 @@ public sealed class WebServer : IDisposable
         if (!IsLocal(c) || !OriginIsThisDashboard(origin) || !TokenMatches(token)) { Send(stream, 403, "application/json", Err("Settings can be changed on the PC running SVS Performance Monitor.")); return; }
         if (!contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase)) { Send(stream, 415, "application/json", Err("JSON only")); return; }
         if (Settings == null) { Send(stream, 409, "application/json", Err("These settings belong to the tray app. This copy was started from the command line.")); return; }
-        if (frameTimesSetup) {   // POST /api/frametimes-setup (body "{}"): a Windows permission prompt, waits for it
+        if (route == "/api/group-members") { GroupMembers(stream, body, Err); return; }
+        if (route == "/api/frametimes-setup") {   // POST /api/frametimes-setup (body "{}"): a Windows permission prompt, waits for it
             Send(stream, 200, "application/json", Err(Settings.SetupFrameTimes()));
             return;
         }
@@ -446,8 +275,33 @@ public sealed class WebServer : IDisposable
         Settings.Saved();   // after the answer is sent: the tray app restarts the monitor (and this server) with them
     }
 
+    // POST /api/group-members {"add":"<name>"} -> {"id","name","code"} (the code is shown once) | {"remove":"<id>"} -> {}
+    // Same locks as saving the settings (this PC, this page, the token): the group is managed only on the host's PC.
+    private void GroupMembers(NetworkStream stream, byte[] body, Func<string, byte[]> err)
+    {
+        var members = Host?.GroupMembers;
+        if (members == null) { Send(stream, 409, "application/json", err("Turn on hosting a group and save first.")); return; }
+        try {
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("add", out var add) && add.ValueKind == System.Text.Json.JsonValueKind.String) {
+                var (m, code, problem) = members.Add(add.GetString() ?? "");
+                if (m == null) { Send(stream, 422, "application/json", err(problem ?? "not added")); return; }
+                string S(string v) => System.Text.Json.JsonSerializer.Serialize(v, FsperfJson.Default.String);
+                Send(stream, 200, "application/json", Encoding.UTF8.GetBytes($"{{\"id\":{S(m.Id)},\"name\":{S(m.Name)},\"code\":{S(code)}}}"));
+                return;
+            }
+            if (root.TryGetProperty("remove", out var rm) && rm.ValueKind == System.Text.Json.JsonValueKind.String) {
+                if (!members.Remove(rm.GetString() ?? "")) { Send(stream, 404, "application/json", err("Not in the group.")); return; }
+                Send(stream, 200, "application/json", Encoding.UTF8.GetBytes("{}"));
+                return;
+            }
+        } catch { }
+        Send(stream, 400, "application/json", err("bad request"));
+    }
+
     // the page's static files (embedded): the design's style sheet and the brand art
-    private static readonly Dictionary<string, (string Type, byte[] Body)> Assets = LoadAssets();
+    internal static readonly Dictionary<string, (string Type, byte[] Body)> Assets = LoadAssets();
 
     private static Dictionary<string, (string, byte[])> LoadAssets()
     {
@@ -468,35 +322,15 @@ public sealed class WebServer : IDisposable
         return d;
     }
 
-    public void Publish(string json)
-    {
-        _last = json;
-        lock (_lock) {
-            for (int i = _clients.Count - 1; i >= 0; i--) {
-                try { _clients[i].Write($"data: {json}\n\n"); }
-                catch {
-                    try { _clients[i].Dispose(); } catch { }  // closes the socket too
-                    _clients.RemoveAt(i);
-                }
-            }
-        }
-    }
+    public void Publish(string json) => _events.Publish(json);
 
     // also closes every open live view (dashboard and log): their browsers reconnect, to the restarted server after a
     // settings change, instead of hanging on to this one
     public void Dispose()
     {
         _stop = true;
-        if (_tail != null) { _tail.Appended -= OnLogAppended; _tail.Heartbeat -= OnLogHeartbeat; }
         try { _listener.Stop(); } catch { }
-        lock (_lock) {
-            foreach (var w in _clients) { try { w.Dispose(); } catch { } }
-            _clients.Clear();
-        }
-        if (_tail != null) {
-            List<LogClient> logs;
-            lock (_tail.Gate) { logs = [.. _logClients]; _logClients.Clear(); }
-            foreach (var cl in logs) cl.Close();   // outside the gate: closing does I/O
-        }
+        _events.Dispose();
+        _logs?.Dispose();
     }
 }

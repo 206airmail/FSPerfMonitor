@@ -22,6 +22,22 @@
 <div class="setting"><div><div class="setting-title">Let my phone or other computers at home open the dashboard</div><p>They can also see your game log, which shows your Windows user name and mod list. Use a trusted private home network. Windows will ask once.</p></div><label class="check-target" title="Let my phone or other computers at home open the dashboard"><input id="lan" type="checkbox" aria-label="Let my phone or other computers at home open the dashboard"></label></div>
 <p class="meta" id="network-address">Home network sharing is off.</p>
 </section>
+<section class="card" id="group-share"><h2>Share with a group</h2>
+<div class="setting"><div><div class="setting-title">Share my game log and performance with my group</div><p>Everyone in your group can watch your dashboard and game log while this is on. Your Windows user name and computer name are removed first. Stop any time here or from the tray icon.</p></div><label class="check-target" title="Share my game log and performance with my group"><input id="share" type="checkbox" aria-label="Share my game log and performance with my group"></label></div>
+<div class="field"><label for="group-address">Group address</label><input id="group-address" type="text" spellcheck="false" placeholder="perf.example.com:9443" aria-describedby="group-address-help group-address-error"><span id="group-address-help" class="meta">From your group’s host.</span><span id="group-address-error" class="field-error" hidden></span></div>
+<div class="field"><label for="invite-code">Invite code</label><input id="invite-code" type="password" spellcheck="false" autocomplete="off" aria-describedby="invite-code-help invite-code-error"><span id="invite-code-help" class="meta">Your own code from the group’s host. Keep it to yourself: it also signs you in to watch the group.</span><span id="invite-code-error" class="field-error" hidden></span></div>
+<p class="meta" id="share-status" role="status">Sharing is off.</p>
+</section>
+<section class="card" id="group-host"><h2>Host a group</h2>
+<div class="setting"><div><div class="setting-title">Host a group on this PC</div><p>Only for the person who runs the group. Needs a web server with HTTPS in front of it, such as Caddy (see the README). Only people you add here can share or watch.</p></div><label class="check-target" title="Host a group on this PC"><input id="host" type="checkbox" aria-label="Host a group on this PC"></label></div>
+<div class="field"><label for="group-port">Group port</label><input id="group-port" type="number" min="1" max="65535" aria-describedby="group-port-help group-port-error"><span id="group-port-help" class="meta">The group listens on this PC only (127.0.0.1). Point your web server here.</span><span id="group-port-error" class="field-error" hidden></span></div>
+<p class="meta" id="host-status" role="status">Not hosting a group.</p>
+<div id="members-area" class="stack" hidden>
+<div class="plugin-list" id="members"></div>
+<div class="field"><label for="member-name">Add someone</label><div class="row"><input id="member-name" type="text" maxlength="40" spellcheck="false" placeholder="Their name"><button type="button" id="member-add">Add</button></div><span id="member-error" class="field-error" hidden></span></div>
+<div id="new-code" class="banner" role="status" hidden></div>
+</div>
+</section>
 <section class="card"><h2>Advanced</h2>
 <div class="setting"><div><div class="setting-title">Run with full permissions</div><p>Shows frame times without the setup above, and is needed for the detailed mod breakdown (coming later). Windows asks once when you turn it on or off.</p></div><label class="check-target" title="Run with full permissions"><input id="elevated" type="checkbox" aria-label="Run with full permissions"></label></div>
 <div class="setting"><div><div class="setting-title">Show what the game’s main loop spends time on</div><p>Briefly pauses the game hundreds of times a second; it slows the game a little (a few percent). Leave off for timing-sensitive comparisons, or keep it the same for both runs.</p></div><label class="check-target" title="Show what the game’s main loop spends time on"><input id="sampling-enabled" type="checkbox" aria-label="Show what the game’s main loop spends time on"></label></div>
@@ -64,10 +80,16 @@ function show(v) {
   $("sampling-enabled").checked = s.mainLoopBreakdown;
   $("profile").value = s.profileFolder || v.defaultProfileFolder;
   $("port").value = s.port;
+  $("share").checked = s.shareWithGroup;
+  $("group-address").value = s.groupAddress;
+  $("invite-code").value = s.inviteCode;
+  $("host").checked = s.hostGroup;
+  $("group-port").value = s.groupPort;
+  groupStatus(v);
   $("version").textContent = v.version;
   const ro = !v.canEdit;
   $("settings-origin").textContent = ro ? "Read-only" : "This PC";
-  for (const id of ["startup", "elevated", "lan", "open-browser", "sampling-enabled", "profile", "port"]) {
+  for (const id of ["startup", "elevated", "lan", "open-browser", "sampling-enabled", "profile", "port", "share", "group-address", "invite-code", "host", "group-port"]) {
     const el = $(id);
     if (el.type === "checkbox") el.disabled = ro; else el.readOnly = ro;
   }
@@ -105,6 +127,65 @@ $("setup").onclick = async () => {
   } catch { frameTimes("failure", true); }
   finally { $("setup").disabled = false; }
 };
+
+// the group (#14): how sharing is going, and the hosted group's members (this PC only)
+const SHARE_STATES = {
+  off: "Sharing is off.",
+  connecting: "Connecting to your group…",
+  "bad-code": "Your group doesn’t accept this invite code. Check it with your group’s host.",
+  unreachable: "Can’t reach your group right now. SVS Performance Monitor keeps trying.",
+  "bad-address": "Check the group’s address.",
+};
+function groupStatus(v) {
+  $("share-status").textContent = v.sharing === "sharing" ? "Sharing with your group" + (v.sharingAs ? " as " + v.sharingAs : "") + "."
+    : SHARE_STATES[v.sharing] || SHARE_STATES.off;
+  const s = v.settings;
+  $("host-status").textContent = v.groupProblem ? "⚠ " + v.groupProblem
+    : v.groupRunning ? "Your group is running on this PC at 127.0.0.1:" + s.groupPort + " · " + v.members.length + (v.members.length === 1 ? " member" : " members")
+    : "Not hosting a group.";
+  $("members-area").hidden = !(v.canEdit && v.groupRunning);
+  const list = $("members");
+  list.textContent = "";
+  for (const m of v.members) {
+    const card = document.createElement("article"); card.className = "plugin";
+    const row = document.createElement("div"); row.className = "row between";
+    const h = document.createElement("h3"); h.textContent = m.name;
+    const rm = document.createElement("button"); rm.type = "button"; rm.textContent = "Remove";
+    rm.setAttribute("aria-label", "Remove " + m.name + " from the group");
+    rm.onclick = () => member({ remove: m.id }, "Remove " + m.name + " from the group? Their invite code stops working at once.");
+    row.append(h, rm); card.append(row); list.append(card);
+  }
+}
+async function member(body, confirmText) {
+  if (!view || !view.canEdit) return;
+  if (confirmText && !confirm(confirmText)) return;
+  const err = $("member-error"); err.hidden = true;
+  try {
+    const r = await fetch("/api/group-members", { method: "POST", headers: { "Content-Type": "application/json", "X-SVS-Token": view.token }, body: JSON.stringify(body) });
+    const res = await r.json();
+    if (!r.ok) { err.textContent = "⚠ " + res; err.hidden = false; return; }
+    if (res.code) {
+      const n = $("new-code"); n.textContent = "";
+      const d = document.createElement("div"), st = document.createElement("strong"), p = document.createElement("p"), c = document.createElement("code");
+      st.textContent = "Invite code for " + res.name;
+      p.className = "small"; p.textContent = "Send it to them privately. It is shown only once; if it gets lost, remove them and add them again. ";
+      c.textContent = res.code;
+      d.append(st, p, c); n.append(d); n.hidden = false;
+      $("member-name").value = "";
+    }
+    const v = await (await fetch("/api/settings", { cache: "no-store" })).json();
+    view = v; groupStatus(v);
+  } catch { err.textContent = "⚠ SVS Performance Monitor is not answering."; err.hidden = false; }
+}
+$("member-add").onclick = () => member({ add: $("member-name").value.trim() });
+$("member-name").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); $("member-add").click(); } };
+// the status lines follow by themselves (what the user is editing is left alone)
+setInterval(async () => {
+  try {
+    const v = await (await fetch("/api/settings", { cache: "no-store" })).json();
+    if (view) { Object.assign(view, { sharing: v.sharing, sharingAs: v.sharingAs, groupRunning: v.groupRunning, groupProblem: v.groupProblem, members: v.members }); groupStatus(view); }
+  } catch { }
+}, 5000);
 
 function fieldError(id, msg) {
   const e = $(id + "-error");
@@ -144,7 +225,7 @@ $("settings-form").onsubmit = async e => {
   if (!view || !view.canEdit) return;
   const port = $("port").valueAsNumber, okPort = Number.isInteger(port) && port >= 1 && port <= 65535;
   fieldError("port", okPort ? "" : "Enter a whole number from 1 to 65535.");
-  fieldError("profile", "");
+  fieldError("profile", ""); fieldError("group-address", ""); fieldError("invite-code", ""); fieldError("group-port", "");
   if (!okPort) { $("port").focus(); return; }
   const profile = $("profile").value.trim();
   const s = Object.assign({}, view.settings, {
@@ -155,6 +236,11 @@ $("settings-form").onsubmit = async e => {
     mainLoopBreakdown: $("sampling-enabled").checked,
     profileFolder: profile === view.defaultProfileFolder ? "" : profile,
     port: port,
+    shareWithGroup: $("share").checked,
+    groupAddress: $("group-address").value.trim(),
+    inviteCode: $("invite-code").value.trim(),
+    hostGroup: $("host").checked,
+    groupPort: $("group-port").valueAsNumber,
   });
   $("save").disabled = true;
   try {
@@ -171,6 +257,9 @@ $("settings-form").onsubmit = async e => {
         return;
       }
       if (r.status === 422 && /folder/i.test(body)) fieldError("profile", body);
+      else if (r.status === 422 && /group’s address|https/i.test(body)) fieldError("group-address", body);
+      else if (r.status === 422 && /invite code/i.test(body)) fieldError("invite-code", body);
+      else if (r.status === 422 && /group’s port/i.test(body)) fieldError("group-port", body);
       else if (r.status === 422) fieldError("port", body);
       else notice("Settings were not saved", body);
       return;

@@ -25,6 +25,7 @@ SHARE WITH A GROUP
   To share: Settings, "Share with a group": the group's address and your invite code (both from the host).
   Your Windows user name, computer name and personal folder names are removed before anything is sent.
   Stop any time: right-click the icon, "Stop sharing with my group".
+  Someone may ask for your full logs (the whole files): the icon tells you, and nothing is sent unless you say Yes.
   To watch: open the group's address in any browser and sign in with your invite code.
 
 HOST A GROUP (for the one who runs it; needs a web server with HTTPS, such as Caddy)

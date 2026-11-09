@@ -467,6 +467,32 @@ try {
     Check ($gt3 -match 't3d line' -and $gt3 -notmatch [regex]::Escape($env:USERNAME)) "plugin logs: a member's plugin log arrives through the group, cleaned"
     $gfd = GReq GET "/s/$gid/log/download?src=fsp" $null @($gcookie)
     Check ($gfd.code -eq '200' -and $gfd.headers -match 'filename="Tester_One-FSPluginHost-log-' -and $gfd.body -match 'host line one') "plugin logs: a member's FSPluginHost log downloads"
+    # #16 full logs on request: the zip (all logs, cleaned), then ask -> the sharer's answer carries it -> send -> download
+    $fz = Join-Path $gdir 'full.zip'
+    & $exe --full-logs-zip $gprof $fz
+    $fzx = Join-Path $gdir 'fullx'
+    try { Expand-Archive $fz $fzx -Force } catch { }
+    $fzNames = @(Get-ChildItem $fzx -Recurse -File | ForEach-Object { $_.FullName.Substring($fzx.Length + 1).Replace('\', '/') } | Sort-Object)
+    $fzText = (Get-ChildItem $fzx -Recurse -File | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+    Check (($fzNames -join ',') -eq 'fs25plugins.log,fsp.log,log.txt,plugins/T3D.log' -and $fzText -match 't3d line' -and $fzText -notmatch [regex]::Escape($env:USERNAME) -and $fzText -notmatch [regex]::Escape($env:COMPUTERNAME)) "full logs: one zip with every log, cleaned ($($fzNames -join ', '))"
+    Check ((GReq POST '/api/full-logs/ask' ('{"id":"' + $gid + '"}') @("Origin: $gbase")).code -eq '401') "full logs: asking needs a sign-in"
+    Check ((GReq POST '/api/full-logs/ask' ('{"id":"' + $gid + '"}') @("Origin: $gbase", $gcookie)).code -eq '200') "full logs: a member asks"
+    $fs1 = (GReq GET "/s/$gid/api/full-logs" $null @($gcookie)).body | ConvertFrom-Json
+    Check ($fs1.pending -and $fs1.by -eq 'Tester One' -and -not $fs1.ready) "full logs: the request is pending"
+    # (the real sharer pushes every 2 s: a push within 0.5 s of it is "too fast", so try a few times)
+    $pa = $null
+    for ($i = 0; $i -lt 8 -and -not ($pa -and $pa.code -eq '200'); $i++) { Start-Sleep -Milliseconds 300; $pa = GReq POST '/api/push' '{"run":"fullrun","logs":[]}' @("Authorization: Bearer $gcode") }
+    $rid = if ($pa.body -match '"request":\{"id":"([0-9A-F]+)"') { $matches[1] } else { '' }
+    Check ($rid.Length -eq 16) "full logs: the sharer's next answer carries the request"
+    $up = { param($id, $file, $ctype) curl.exe -s -o NUL -w '%{http_code}' -m 20 -X POST -H "Authorization: Bearer $gcode" -H "X-SVS-Request: $id" -H "Content-Type: $ctype" --data-binary "@$file" "$gbase/api/full-logs/send" }
+    Check ((& $up 'FFFFFFFFFFFFFFFF' $fz 'application/zip') -eq '409') "full logs: a zip nobody asked for is refused"
+    Check ((& $up $rid (Join-Path $gprof 'log.txt') 'application/zip') -eq '415') "full logs: only a zip is taken"
+    Check ((& $up $rid $fz 'application/zip') -eq '200') "full logs: the requested zip is accepted"
+    $fs2 = (GReq GET "/s/$gid/api/full-logs" $null @($gcookie)).body | ConvertFrom-Json
+    $dz = Join-Path $gdir 'dl.zip'
+    $dcode = curl.exe -s -o $dz -w '%{http_code}' -H $gcookie "$gbase/s/$gid/full-logs.zip"
+    Check ($fs2.ready -and -not $fs2.pending -and $dcode -eq '200' -and (Get-FileHash $dz).Hash -eq (Get-FileHash $fz).Hash) "full logs: any member downloads them (status ready, the same zip)"
+    Check ((curl.exe -s -o NUL -w '%{http_code}' "$gbase/s/$gid/full-logs.zip") -eq '401') "full logs: downloading needs a sign-in"
     $gev = (curl.exe -sN --max-time 3 -H $gcookie "$gbase/s/$gid/events") -join "`n"
     Check ($gev -match '^data: \{"time"' -or $gev -match '(?m)^data: \{"time"') "group: the member's live numbers arrive"
     Check ((GReq POST '/api/push' '{"epoch":"x","lines":[]}' @('Authorization: Bearer AAAA-BBBB-CCCC-DDDD-EEEE-FFFF')).code -eq '401') "group: a push with an unknown code -> 401"

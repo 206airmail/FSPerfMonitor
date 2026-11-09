@@ -146,6 +146,10 @@ public static class Program
             return 0;
         }
         if (args.Length >= 1 && args[0] is "--group-add" or "--group-list" or "--group-remove") return GroupCommand(args);
+        if (args.Length == 3 && args[0] == "--full-logs-zip") {   // self-test helper (#16): the full-logs zip of a profile folder
+            File.WriteAllBytes(args[2], ShareClient.BuildFullLogsZip(LogSources.Find(args[1], FspStatus.Read(args[1]))));
+            return 0;
+        }
         if (args.Length == 1 && args[0] == "--check-join") {   // self-test helper (#18): stdin = one argument per line -> none | refused | <link>
             var lines = Console.In.ReadToEnd().Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim('﻿')).ToArray();
             string? r = Invites.JoinInvocation(lines);

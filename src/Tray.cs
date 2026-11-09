@@ -15,7 +15,7 @@ public static unsafe class TrayApp
     private const string Title = "SVS Performance Monitor";
     private const uint WM_TRAY = TrayNative.WM_APP + 1, WM_OPEN_REQUEST = TrayNative.WM_APP + 2, WM_EXIT_REQUEST = TrayNative.WM_APP + 3,
         WM_SETTINGS_SAVED = TrayNative.WM_APP + 4;
-    private const int CmdOpen = 1, CmdLog = 2, CmdSettings = 3, CmdStopSharing = 4, CmdExit = 9;
+    private const int CmdOpen = 1, CmdLog = 2, CmdSettings = 3, CmdStopSharing = 4, CmdSendLogs = 5, CmdDeclineLogs = 6, CmdExit = 9;
     private const nuint TimerId = 1, RestartTimerId = 2;
 
     private static MonitorHost? s_host;
@@ -332,6 +332,56 @@ public static unsafe class TrayApp
         }
     }
 
+    // ---- full logs on request (#16) ----
+    private static string s_lastLogRequest = "";
+    private static int s_askingLogs;
+
+    // every second: a new request from the group = a balloon (once per request); the menu offers Send / Don't send
+    private static void PollLogRequest()
+    {
+        var req = s_host?.LogRequest;
+        if (req == null || req.Id == s_lastLogRequest) return;
+        s_lastLogRequest = req.Id;
+        Balloon($"{req.By} asks for your full logs",
+            "Click here, or right-click the icon, to send them. You'll be asked first; nothing is sent without your OK.");
+    }
+
+    // the question (No by default), then the zip goes to the group; on a worker thread (packing takes a moment)
+    private static void AskSendLogs()
+    {
+        var host = s_host;
+        var req = host?.LogRequest;
+        if (host == null || req == null || Interlocked.Exchange(ref s_askingLogs, 1) != 0) return;
+        string where;
+        lock (s_settingsLock) where = ShareClient.ParseAddress(s_settings.GroupAddress, out _)?.GetLeftPart(UriPartial.Authority) ?? s_settings.GroupAddress;
+        ThreadPool.QueueUserWorkItem(_ => {
+            try {
+                string text = "Send your full logs to the group?\n\n" + $"Group: {where}\nAsked by: {req.By}\n\n" +
+                    "One zip with the whole game log and the FSPluginHost logs, cleaned like the live view (your Windows user name, " +
+                    "computer name and personal folders removed). Everyone in the group can download it for an hour.";
+                if (TrayNative.MessageBoxW(IntPtr.Zero, text, Title, 0x4 | 0x20 | 0x100 /* MB_DEFBUTTON2: No */ | 0x10000) != 6) return;
+                string? problem = host.SendFullLogs(req.Id);
+                if (problem == null) Balloon("Full logs sent", $"Everyone in the group can download them for an hour.");
+                else TrayNative.MessageBoxW(IntPtr.Zero, "Your full logs weren't sent: " + problem, Title, TrayNative.MB_ICONWARNING);
+            } finally { Volatile.Write(ref s_askingLogs, 0); }
+        });
+    }
+
+    private static void Balloon(string title, string text)
+    {
+        if (!s_iconAdded) return;
+        var d = Data();
+        d.uFlags = 0x10;   // NIF_INFO
+        d.dwInfoFlags = 0x1;   // NIIF_INFO
+        int n = Math.Min(title.Length, 63);
+        for (int i = 0; i < n; i++) d.szInfoTitle[i] = title[i];
+        d.szInfoTitle[n] = '\0';
+        n = Math.Min(text.Length, 255);
+        for (int i = 0; i < n; i++) d.szInfo[i] = text[i];
+        d.szInfo[n] = '\0';
+        TrayNative.Shell_NotifyIconW(TrayNative.NIM_MODIFY, &d);
+    }
+
     // ---- joining a group by invite link (#18) ----
     private static int s_joining;   // one question at a time; the next request waits for it
 
@@ -462,11 +512,12 @@ public static unsafe class TrayApp
                     switch ((uint)(lParam.ToInt64() & 0xFFFF)) {
                         case TrayNative.WM_LBUTTONDBLCLK: case TrayNative.NIN_KEYSELECT: OpenUrl(DashboardUrl()); break;
                         case TrayNative.WM_CONTEXTMENU: ShowMenu(); break;
+                        case 0x405 /* NIN_BALLOONUSERCLICK */: if (s_host?.LogRequest != null) AskSendLogs(); break;
                     }
                     return IntPtr.Zero;
                 case TrayNative.WM_TIMER:
                     if ((nuint)wParam == RestartTimerId) { TrayNative.KillTimer(hwnd, RestartTimerId); RestartMonitor(); }
-                    else { Refresh(); PollJoin(); }
+                    else { Refresh(); PollJoin(); PollLogRequest(); }
                     return IntPtr.Zero;
                 case WM_SETTINGS_SAVED:
                     // a moment's delay: the page's request has been answered, its connection may still be closing
@@ -553,6 +604,10 @@ public static unsafe class TrayApp
             Append(menu, TrayNative.MF_STRING, CmdSettings, "Settings");
             bool sharing; lock (s_settingsLock) sharing = s_settings.ShareWithGroup;
             if (sharing) Append(menu, TrayNative.MF_STRING, CmdStopSharing, "Stop sharing with my group");
+            if (s_host?.LogRequest is { } lr) {   // #16: someone asked for this PC's full logs
+                Append(menu, TrayNative.MF_STRING, CmdSendLogs, $"Send my full logs to the group (asked by {lr.By})…");
+                Append(menu, TrayNative.MF_STRING, CmdDeclineLogs, "Don't send my full logs");
+            }
             Append(menu, TrayNative.MF_SEPARATOR, 0, null);
             Append(menu, TrayNative.MF_STRING, CmdExit, "Exit");
             TrayNative.SetMenuDefaultItem(menu, CmdOpen, 0);
@@ -567,6 +622,8 @@ public static unsafe class TrayApp
                 case CmdLog: OpenUrl(DashboardUrl() + "log"); break;
                 case CmdSettings: OpenUrl(DashboardUrl() + "settings"); break;
                 case CmdExit: TrayNative.DestroyWindow(s_hwnd); break;
+                case CmdSendLogs: AskSendLogs(); break;
+                case CmdDeclineLogs: { var h = s_host; ThreadPool.QueueUserWorkItem(_ => h?.DeclineFullLogs()); break; }
                 case CmdStopSharing: {
                     var s = s_backend.Current;
                     s.ShareWithGroup = false;

@@ -29,6 +29,9 @@ public sealed class MonitorHost : IDisposable
     public string GroupProblem { get; } = "";
     public string ShareState => _share?.State ?? (_shareProblem.Length > 0 ? "bad-address" : "off");
     public string ShareName => _share?.MemberName ?? "";
+    public ShareClient.LogRequest? LogRequest => _share?.Request;   // #16
+    public string? SendFullLogs(string requestId) => _share?.SendFullLogs(requestId) ?? "this PC isn't sharing with a group.";
+    public void DeclineFullLogs() => _share?.DeclineFullLogs();
     private readonly string _shareProblem = "";
 
     // #15: every log the pages can show (the game's + FSPluginHost's), each followed by its own tail; looked for again

@@ -102,6 +102,15 @@ is ever opened. `GET /api/logs` lists them; `/log/stream?src=<id>` and `/log/dow
 `loader`, `plugin:<Name>`). Each is followed like the game log (last 1 MB first; 3,000 lines kept per plugin log).
 Sharing sends all of them, cleaned the same way; the relay keeps 10,000 lines of the game log and 3,000 per other log.
 
+## Full logs on request (0.6, #16)
+
+The group keeps only the newest lines of a member's logs. For the whole files, a member clicks "Ask for the full
+logs" on that member's log page (`POST /api/full-logs/ask`). The sharer's app gets the request with its next send,
+shows a balloon and a tray menu item, and asks its user (No is the default). Yes: one zip with the whole game log and
+the FSPluginHost logs (the newest 64 MB of each file), every line cleaned like the live view, uploaded with the invite
+code and the request id (`POST /api/full-logs/send`, 16 MB at most). Any member can download it for an hour
+(`/s/<id>/full-logs.zip`); the relay keeps at most 64 MB of full logs in all, in memory only. "Don't send" declines.
+
 ## Dedicated server (0.6, #17)
 
 A dedicated server is `FarmingSimulator2025Game.exe` started with `-server` / `-serverWithGui` (by the web admin,

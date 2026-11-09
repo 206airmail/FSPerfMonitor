@@ -31,6 +31,9 @@ public sealed class ShareClient : IDisposable
     // what the Settings page and the tray say: "connecting" | "sharing" | "bad-code" | "unreachable"
     public volatile string State = "connecting";
     public volatile string MemberName = "";
+    // #16: a group member asked for this PC's full logs (from the relay's last answer); null = no open request
+    public volatile LogRequest? Request;
+    public sealed record LogRequest(string Id, string By);
 
     public ShareClient(Uri relay, string code, Func<List<(LogSource Src, LogTail Tail)>> logs, Func<Snapshot?> snapshot, int localPort = 0)
     {
@@ -142,6 +145,10 @@ public sealed class ShareClient : IDisposable
                 if (root.TryGetProperty("resync", out var rs) && rs.ValueKind == JsonValueKind.Array)
                     foreach (var id in rs.EnumerateArray()) if (id.GetString() is { } sid) { _acks.Remove(sid); resync = true; }
                 if (root.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String) MemberName = n.GetString() ?? "";
+                Request = root.TryGetProperty("request", out var rq) && rq.ValueKind == JsonValueKind.Object
+                    && rq.TryGetProperty("id", out var ri) && ri.ValueKind == JsonValueKind.String && ri.GetString() is { Length: > 0 and <= 32 } rid
+                    && rq.TryGetProperty("by", out var rb) && rb.ValueKind == JsonValueKind.String
+                    ? new LogRequest(rid, Invites.CleanName(rb.GetString())) : null;
                 State = "sharing";
                 _maxLines = Math.Min(RelayServer.MaxLinesPerPush, _maxLines * 2);
                 return more || resync ? 600 : IntervalMs;   // catching up: a little faster
@@ -155,6 +162,64 @@ public sealed class ShareClient : IDisposable
     }
 
     private const int Budget = RelayServer.MaxBody - 16 * 1024;
+
+    // ---- #16 full logs on request ----
+    // the files themselves (each log's whole file, the newest 64 MB at most), every line cleaned like the live view,
+    // in one zip. null = sent; else why not
+    public string? SendFullLogs(string requestId)
+    {
+        byte[] zip;
+        try { zip = BuildFullLogsZip(_logs().Select(l => l.Src)); }
+        catch (Exception e) { return "the logs couldn't be packed: " + e.Message; }
+        if (zip.Length > RelayServer.MaxFullLogs) return $"the logs are too big to send, even packed ({zip.Length / 1048576} MB; at most {RelayServer.MaxFullLogs / 1048576} MB).";
+        try {
+            using var http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false, ConnectTimeout = TimeSpan.FromSeconds(10) }) { Timeout = TimeSpan.FromMinutes(3) };
+            using var req = new HttpRequestMessage(HttpMethod.Post, new Uri(_push, "/api/full-logs/send")) { Content = new ByteArrayContent(zip) };
+            req.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+            req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + _code);
+            req.Headers.TryAddWithoutValidation("X-SVS-Request", requestId);
+            using var resp = http.Send(req);
+            if (resp.IsSuccessStatusCode) { Request = null; return null; }
+            string body = new StreamReader(resp.Content.ReadAsStream()).ReadToEnd();
+            try { return JsonSerializer.Deserialize(body, FsperfJson.Default.String) ?? $"the group answered {(int)resp.StatusCode}."; }
+            catch { return $"the group answered {(int)resp.StatusCode}."; }
+        } catch (Exception e) { return "the group couldn't be reached: " + e.Message; }
+    }
+
+    public void DeclineFullLogs()
+    {
+        Request = null;
+        try {
+            using var req = new HttpRequestMessage(HttpMethod.Post, new Uri(_push, "/api/full-logs/decline")) { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
+            req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + _code);
+            using var _ = _http.Send(req);
+        } catch { }
+    }
+
+    public const long FullLogsFileBytes = 64L * 1024 * 1024;
+
+    public static byte[] BuildFullLogsZip(IEnumerable<LogSource> sources)
+    {
+        using var ms = new MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true)) {
+            foreach (var src in sources) {
+                if (src.Path.Length == 0 || !File.Exists(src.Path)) continue;
+                string entry = src.Id switch {
+                    LogSources.Game => "log.txt", "fsp" => "fsp.log", "loader" => "fs25plugins.log",
+                    _ => "plugins/" + src.Id[7..] + ".log",   // a plain name (LogSources.ValidPluginName)
+                };
+                using var fs = new FileStream(src.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                bool cut = fs.Length > FullLogsFileBytes;
+                if (cut) fs.Seek(fs.Length - FullLogsFileBytes, SeekOrigin.Begin);
+                using var reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                using var w = new StreamWriter(zip.CreateEntry(entry, System.IO.Compression.CompressionLevel.Optimal).Open(), new UTF8Encoding(false));
+                if (cut) { reader.ReadLine(); w.WriteLine($"=== the first {(fs.Length - FullLogsFileBytes) / 1048576} MB of this file were left out (it is very long) ==="); }
+                string? line;
+                while ((line = reader.ReadLine()) != null) w.WriteLine(Redactor.Apply(line));
+            }
+        }
+        return ms.ToArray();
+    }
 
     // stops sharing: the send in progress is cancelled and finished FIRST, then the relay is told (so no late send can
     // bring the share back; the relay also refuses later sends of this run), briefly and best effort

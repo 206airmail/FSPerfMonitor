@@ -11,7 +11,8 @@
 <div class="log-tools"><div class="field" id="src-field" hidden><label for="src" class="small">Log</label><select id="src" aria-describedby="src-help"></select><span id="src-help" class="meta">The game’s log, or FSPluginHost’s and its plugins’ logs.</span></div>
 <label for="filter" class="small">Find text in the log</label><input id="filter" type="search" placeholder="Filter lines…" autocomplete="off" autocapitalize="off" spellcheck="false">
 <div class="row between"><div class="filters"><button id="bErr" aria-pressed="false">Errors</button><button id="bWarn" aria-pressed="false">Warnings</button><button id="bFail" aria-pressed="false">FAIL</button></div><div class="actions"><button id="pause" aria-pressed="false">Pause</button><button id="clear">Clear</button><a class="button" id="download" href="log/download" download title="Save the lines kept for this log as a text file">Download</a></div></div>
-<p class="meta">Selected levels are combined. Text ignores letter case. Clear affects this view only.</p></div>
+<p class="meta">Selected levels are combined. Text ignores letter case. Clear affects this view only.</p>
+<div id="full" class="row between" hidden><p class="small" id="full-status" role="status"></p><div class="actions"><button type="button" id="full-ask">Ask for the full logs</button><a class="button primary" id="full-dl" href="full-logs.zip" download hidden>Download full logs</a></div></div></div>
 <div class="log-viewport" id="log" role="region" aria-label="Game log lines" tabindex="0"></div>
 <div class="log-bottom"><span class="meta" id="log-count"></span><button class="primary" id="jump" hidden>Jump to live ↓</button></div></main>
 <script>
@@ -203,6 +204,37 @@ async function loadSources() {
 }
 $("src").onchange = e => switchTo(e.target.value);
 setInterval(loadSources, 15000);   // plugin logs appear when the game starts
+// #16 (a group member's log on the relay): the whole files, on request; the member decides in their app
+const RELAY_PAGE = document.documentElement.dataset.relay === "1";
+const MEMBER = (location.pathname.match(/^\/s\/([^/]+)\//) || [])[1] || "";
+async function fullStatus() {
+  try {
+    const f = await (await fetch("api/full-logs", { cache: "no-store" })).json();
+    const el = $("full-status");
+    if (f.ready) {
+      const mb = (f.size / 1048576).toFixed(1);
+      el.textContent = `Full logs ready: ${mb} MB, sent ${new Date(f.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` + (f.from ? ` (asked by ${f.from})` : "") + ". Kept for an hour.";
+    } else if (f.pending) el.textContent = `Asked${f.by ? " by " + f.by : ""}. Waiting for them to send their full logs…`;
+    else if (f.declined) el.textContent = "They chose not to send their full logs.";
+    else el.textContent = "This view keeps the newest lines. For the whole log files, ask them: their app asks them first.";
+    $("full-dl").hidden = !f.ready;
+    $("full-ask").hidden = f.pending;
+  } catch { }
+}
+if (RELAY_PAGE && MEMBER) {
+  $("full").hidden = false;
+  $("full-ask").onclick = async () => {
+    $("full-ask").disabled = true;
+    try {
+      const r = await fetch("/api/full-logs/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: decodeURIComponent(MEMBER) }) });
+      if (!r.ok) { const b = await r.json().catch(() => ""); $("full-status").textContent = typeof b === "string" && b ? b : "That didn't work. Try again."; }
+      else await fullStatus();
+    } catch { $("full-status").textContent = "The group is not answering."; }
+    finally { $("full-ask").disabled = false; }
+  };
+  fullStatus();
+  setInterval(fullStatus, 5000);
+}
 setDownload();
 loadSources();
 rebuild();

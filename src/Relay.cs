@@ -177,6 +177,11 @@ public sealed class RelayServer : IDisposable
     private const int RequestDeadlineMs = 10000, SessionDays = 30;
     // everything on this port comes from the internet: bounded work at every step (Codex #14)
     private const int MaxActive = 64, MaxLiveViews = 128, MaxSmallBody = 4 * 1024;
+    // #16 full logs on request: one zip per member, 16 MB at most, 64 MB for the whole group, kept an hour; a request
+    // waits 30 minutes for the sharer's answer; one request per member a minute
+    public const int MaxFullLogs = 16 * 1024 * 1024;
+    private const long MaxFullLogsTotal = 64L * 1024 * 1024;
+    private static readonly TimeSpan FullLogsKept = TimeSpan.FromHours(1), RequestWaits = TimeSpan.FromMinutes(30);
     private const string Cookie = "svs_group";
     private static readonly TimeSpan Away = TimeSpan.FromSeconds(30), Gone = TimeSpan.FromMinutes(10);
 
@@ -186,7 +191,9 @@ public sealed class RelayServer : IDisposable
     private readonly Dictionary<string, Share> _shares = new();                       // member id -> what they share (under _lock)
     private readonly Dictionary<string, (int Count, DateTime Since)> _failures = new();         // client address -> failed sign-ins
     private readonly Dictionary<string, List<TcpClient>> _views = new();   // viewer member id -> their open live views (under _lock)
-    private readonly Dictionary<string, string> _stopped = new();          // member id -> the sharing run that stopped (under _lock)
+    // member id -> the sharing runs that stopped (the newest 8; under _lock). A stopped run never comes back, whatever
+    // their other runs (another PC with the same code, a restart) send meanwhile
+    private readonly Dictionary<string, List<string>> _stopped = new();
     private readonly SemaphoreSlim _downloads = new(2, 2);
     private int _active;                                                    // requests being handled right now
     private readonly Timer _sweep;
@@ -202,6 +209,13 @@ public sealed class RelayServer : IDisposable
         public readonly EventHub Events = new(8);
         public readonly Dictionary<string, Source> Logs = new();   // log id ("game", "fsp", "plugin:<Name>"...) -> its lines (under the share's lock)
         public string Run = "";        // the sharer's current sharing run (a stop names it)
+        // #16 (under the relay's _lock): the open request for their full logs, and the zip they sent
+        public string ReqId = "", ReqBy = "";
+        public DateTime ReqAt;
+        public bool Declined;
+        public byte[]? Full;
+        public DateTime FullAt;
+        public string FullBy = "";
         public int Port;               // their PC's dashboard port: "Settings on this PC" for this member's own browsers
         public DateTime Since = DateTime.UtcNow, LastPush = DateTime.MinValue;   // LastPush: the last ACCEPTED push
         public Share(string id, string name) { MemberId = id; Name = name; }
@@ -295,6 +309,10 @@ public sealed class RelayServer : IDisposable
             var now = DateTime.UtcNow;
             foreach (var (id, s) in _shares.ToList())
                 if (now - s.LastPush > Gone) { _shares.Remove(id); drop.Add(s); }
+            foreach (var s in _shares.Values) {   // #16: requests and full logs expire
+                if (s.ReqId.Length > 0 && now - s.ReqAt > RequestWaits) s.ReqId = "";
+                if (s.Full != null && now - s.FullAt > FullLogsKept) s.Full = null;
+            }
             live = _shares.Values.ToList();
             foreach (var (ip, f) in _failures.ToList()) if (now - f.Since > TimeSpan.FromMinutes(10)) _failures.Remove(ip);
             PruneViewsLocked();
@@ -341,7 +359,7 @@ public sealed class RelayServer : IDisposable
 
     private sealed class Request
     {
-        public string Method = "", Path = "", Route = "", Host = "", Origin = "", ContentType = "", Auth = "", Cookie = "", LastEventId = "", Client = "";
+        public string Method = "", Path = "", Route = "", Host = "", Origin = "", ContentType = "", Auth = "", Cookie = "", LastEventId = "", Client = "", RequestId = "";
         public int Length;
     }
 
@@ -373,6 +391,7 @@ public sealed class RelayServer : IDisposable
                     case "authorization": r.Auth = v; break;
                     case "cookie": r.Cookie = r.Cookie.Length > 0 ? r.Cookie + "; " + v : v; break;
                     case "last-event-id": r.LastEventId = v; break;
+                    case "x-svs-request": r.RequestId = v.Length <= 32 ? v : ""; break;
                     case "x-forwarded-for": r.Client = v.Split(',')[0].Trim(); break;   // set by the HTTPS front (Caddy)
                     case "content-length": int.TryParse(v, out r.Length); break;
                 }
@@ -425,6 +444,29 @@ public sealed class RelayServer : IDisposable
             switch (sub) {
                 case "": Send(stream, 200, "text/html; charset=utf-8", MemberPage(_dashPage, s.Name, MyPort(me))); return false;
                 case "log": Send(stream, 200, "text/html; charset=utf-8", MemberPage(_logPage, s.Name, MyPort(me))); return false;
+                case "api/full-logs": {   // #16: {"pending","by","declined","ready","at","size","from"}
+                    string json;
+                    lock (_lock) {
+                        string S(string v) => JsonSerializer.Serialize(v, FsperfJson.Default.String);
+                        json = $"{{\"pending\":{(s.ReqId.Length > 0 ? "true" : "false")},\"by\":{S(s.ReqBy)},\"declined\":{(s.Declined ? "true" : "false")}," +
+                               $"\"ready\":{(s.Full != null ? "true" : "false")},\"at\":{JsonSerializer.Serialize(s.FullAt, FsperfJson.Default.DateTime)}," +
+                               $"\"size\":{s.Full?.Length ?? 0},\"from\":{S(s.FullBy)}}}";
+                    }
+                    Send(stream, 200, "application/json", json);
+                    return false;
+                }
+                case "full-logs.zip": {
+                    byte[]? zip; DateTime at;
+                    lock (_lock) { zip = s.Full; at = s.FullAt; }
+                    if (zip == null) { Send(stream, 404, "text/plain", "no full logs"); return false; }
+                    string safe = new string(s.Name.Select(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_' ? ch : '_').ToArray()).Trim('_');
+                    stream.WriteTimeout = 30000;
+                    stream.Write(Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: application/zip\r\nContent-Length: {zip.Length}\r\n" +
+                        $"Content-Disposition: attachment; filename=\"{(safe.Length > 0 ? safe : "member")}-full-logs-{at.ToLocalTime():yyyyMMdd-HHmm}.zip\"\r\n" +
+                        "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Robots-Tag: noindex, nofollow\r\nConnection: close\r\n\r\n"));
+                    stream.Write(zip);
+                    return false;
+                }
                 case "api/logs": {   // #15: the logs this member shares, the game's first
                     var ids = s.Ids();
                     if (!ids.Contains(LogSources.Game)) ids.Insert(0, LogSources.Game);
@@ -459,8 +501,10 @@ public sealed class RelayServer : IDisposable
     private void HandlePost(TcpClient c, NetworkStream stream, Request r, DateTime deadline)
     {
         void Refuse(int code, string msg) { Send(stream, code, "application/json", msg); try { c.Client.Shutdown(SocketShutdown.Send); } catch { } }
-        bool sharing = r.Route is "/api/push" or "/api/stop";
-        if (r.Length < 0 || r.Length > (r.Route == "/api/push" ? MaxBody : MaxSmallBody)) { Refuse(413, "\"too big\""); return; }
+        bool sharing = r.Route is "/api/push" or "/api/stop" or "/api/full-logs/send" or "/api/full-logs/decline";
+        int limit = r.Route == "/api/push" ? MaxBody : r.Route == "/api/full-logs/send" ? MaxFullLogs : MaxSmallBody;
+        if (r.Length < 0 || r.Length > limit) { Refuse(413, "\"too big\""); return; }
+        if (r.Route == "/api/full-logs/send") deadline = DateTime.UtcNow.AddMinutes(3);   // 16 MB on a slow upload
         // a sender proves the invite code before anything is read or kept for it
         RelayMember? sender = null;
         if (sharing) {
@@ -478,8 +522,15 @@ public sealed class RelayServer : IDisposable
             if (n <= 0) return;
             got += n;
         }
+        if (r.Route == "/api/full-logs/send") { ReceiveFullLogs(stream, sender!, r, body); return; }
         if (!r.ContentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase)) { Send(stream, 415, "application/json", "\"JSON only\""); return; }
         switch (r.Route) {
+            case "/api/full-logs/ask": AskFullLogs(stream, r, body); return;
+            case "/api/full-logs/decline": {
+                lock (_lock) if (_shares.TryGetValue(sender!.Id, out var ds) && ds.ReqId.Length > 0) { ds.ReqId = ""; ds.Declined = true; }
+                Send(stream, 200, "application/json", "{}");
+                return;
+            }
             case "/api/push": Push(stream, sender!, body); return;
             case "/api/stop": {
                 // {"run":"<the sharing run that stops>"}: a push of that run arriving late is refused (it must not bring
@@ -487,7 +538,10 @@ public sealed class RelayServer : IDisposable
                 string run = "";
                 try { using var d = JsonDocument.Parse(body); if (d.RootElement.TryGetProperty("run", out var e) && e.ValueKind == JsonValueKind.String) run = e.GetString() ?? ""; } catch { }
                 Share? s;
-                lock (_lock) { _shares.Remove(sender!.Id, out s); if (run.Length is > 0 and <= 32) _stopped[sender.Id] = run; }
+                lock (_lock) { _shares.Remove(sender!.Id, out s); if (run.Length is > 0 and <= 32) {
+                    if (!_stopped.TryGetValue(sender.Id, out var runs)) _stopped[sender.Id] = runs = new();
+                    if (!runs.Contains(run)) { runs.Add(run); if (runs.Count > 8) runs.RemoveAt(0); }
+                } }
                 s?.Dispose();
                 Send(stream, 200, "application/json", "{}");
                 return;
@@ -577,9 +631,8 @@ public sealed class RelayServer : IDisposable
             // share must not come back; the removal handler takes this same lock after updating the list)
             var cur = _members.Get(m.Id);
             if (cur == null || cur.CodeHash != m.CodeHash) refuse = "\"This invite code is not in the group.\"";
-            else if (_stopped.TryGetValue(m.Id, out var stoppedRun) && stoppedRun == run) refuse = "\"stopped\"";
+            else if (_stopped.TryGetValue(m.Id, out var stoppedRuns) && stoppedRuns.Contains(run)) refuse = "\"stopped\"";
             else {
-                _stopped.Remove(m.Id);
                 if (!_shares.TryGetValue(m.Id, out share)) _shares[m.Id] = share = new Share(m.Id, m.Name);
                 else if (DateTime.UtcNow - share.LastPush < TimeSpan.FromMilliseconds(500)) refuse = "\"Too fast.\"";
             }
@@ -617,7 +670,50 @@ public sealed class RelayServer : IDisposable
             if (snapshot != null) share.Events.Publish(snapshot);
         }
         string rs = string.Join(",", resync.Select(x => JsonSerializer.Serialize(x, FsperfJson.Default.String)));
-        Send(stream, 200, "application/json", $"{{\"name\":{JsonSerializer.Serialize(m.Name, FsperfJson.Default.String)},\"acks\":{{{acks}}},\"resync\":[{rs}]}}");
+        string req = "";
+        lock (_lock) if (share.ReqId.Length > 0) req = $",\"request\":{{\"id\":\"{share.ReqId}\",\"by\":{JsonSerializer.Serialize(share.ReqBy, FsperfJson.Default.String)}}}";
+        Send(stream, 200, "application/json", $"{{\"name\":{JsonSerializer.Serialize(m.Name, FsperfJson.Default.String)},\"acks\":{{{acks}}},\"resync\":[{rs}]{req}}}");
+    }
+
+    // ---- #16 full logs on request -------------------------------------------------------------------------------------
+    // A member asks (POST /api/full-logs/ask {"id":"<member id>"}, signed in, same site); the sharer's next push answer
+    // carries {"request":{"id","by"}}; their app asks THEM, then sends a zip (POST /api/full-logs/send, Bearer, header
+    // X-SVS-Request: <request id>, application/zip) or declines. Any member can then download it for an hour.
+    private void AskFullLogs(NetworkStream stream, Request r, byte[] body)
+    {
+        if (!SameOrigin(r)) { Send(stream, 403, "application/json", "\"forbidden\""); return; }
+        var me = Viewer(r);
+        if (me == null) { Send(stream, 401, "application/json", "\"Sign in with your invite code.\""); return; }
+        string id = "";
+        try { using var d = JsonDocument.Parse(body); if (d.RootElement.TryGetProperty("id", out var e) && e.ValueKind == JsonValueKind.String) id = e.GetString() ?? ""; } catch { }
+        string answer;
+        lock (_lock) {
+            if (!_shares.TryGetValue(id, out var s)) answer = "\"They are not sharing right now.\"";
+            else if (s.ReqId.Length > 0) answer = "";   // already asked: still waiting for them
+            else if (DateTime.UtcNow - s.ReqAt < TimeSpan.FromMinutes(1)) answer = "\"Asked a moment ago. Try again in a minute.\"";
+            else { s.ReqId = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)); s.ReqBy = me.Name; s.ReqAt = DateTime.UtcNow; s.Declined = false; answer = ""; }
+        }
+        if (answer.Length > 0) Send(stream, answer.Contains("not sharing") ? 404 : 429, "application/json", answer);
+        else Send(stream, 200, "application/json", "{}");
+    }
+
+    private void ReceiveFullLogs(NetworkStream stream, RelayMember m, Request r, byte[] body)
+    {
+        if (!r.ContentType.StartsWith("application/zip", StringComparison.OrdinalIgnoreCase) || body.Length < 22 || body[0] != 'P' || body[1] != 'K') {
+            Send(stream, 415, "application/json", "\"zip only\""); return;
+        }
+        string answer = "";
+        lock (_lock) {
+            if (!_shares.TryGetValue(m.Id, out var s) || s.ReqId.Length == 0 || !CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(s.ReqId), Encoding.ASCII.GetBytes(r.RequestId)))
+                answer = "\"Nobody asked for them (or the request expired).\"";
+            else {
+                long others = _shares.Values.Where(x => x != s && x.Full != null).Sum(x => (long)x.Full!.Length);
+                if (others + body.Length > MaxFullLogsTotal) answer = "\"The group has no room for more full logs right now. Try again later.\"";
+                else { s.Full = body; s.FullAt = DateTime.UtcNow; s.FullBy = s.ReqBy; s.ReqId = ""; s.Declined = false; }
+            }
+        }
+        if (answer.Length > 0) Send(stream, answer.Contains("room") ? 507 : 409, "application/json", answer);
+        else Send(stream, 200, "application/json", "{}");
     }
 
     // ---- viewers: sign in with the invite code, then a session cookie -------------------------------------------------

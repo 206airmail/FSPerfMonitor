@@ -23,6 +23,15 @@
 <footer class="wrap footer"><span>SimVizion Studios · SVS Performance Monitor</span><span>Only people in this group can see what is shared here.</span></footer>
 <script>
 "use strict";
+// the menu's switch between this PC (127.0.0.1) and the group's address stays in this tab: Firefox opens a clicked link
+// to another site from a PINNED tab in a new tab, but not a navigation by the page itself (Ctrl/middle/Shift-click still open new tabs)
+document.addEventListener("click", e => {
+  const a = e.target instanceof Element ? e.target.closest("a[href]") : null;
+  if (!a || e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || a.target || a.hasAttribute("download")) return;
+  const u = new URL(a.href, location.href);
+  if (u.origin === location.origin || (u.protocol !== "https:" && u.protocol !== "http:")) return;
+  e.preventDefault(); location.assign(u.href);
+});
 const $ = id => document.getElementById(id);
 let timer = null;
 
